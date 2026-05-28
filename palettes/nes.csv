@@ -1,0 +1,65 @@
+hex,name,id
+#7C7C7C,Gray,00
+#0000FC,Blue,01
+#0000BC,Dark Blue,02
+#4428BC,Indigo,03
+#940084,Purple,04
+#A80020,Magenta,05
+#A81000,Dark Red,06
+#881400,Brown,07
+#503000,Dark Brown,08
+#007800,Dark Green,09
+#006800,Forest Green,0A
+#005800,Olive,0B
+#004058,Teal,0C
+#000000,Black 0,0D
+#000000,Black 1,0E
+#000000,Black 2,0F
+#BCBCBC,Light Gray,10
+#0078F8,Light Blue,11
+#0058F8,Sky Blue,12
+#6844FC,Violet,13
+#D800CC,Pink,14
+#E40058,Crimson,15
+#F83800,Red Orange,16
+#E45C10,Orange,17
+#AC7C00,Tan,18
+#00B800,Bright Green,19
+#00A800,Lime,1A
+#00A844,Spring Green,1B
+#008888,Cyan,1C
+#000000,Black 3,1D
+#000000,Black 4,1E
+#000000,Black 5,1F
+#F8F8F8,White,20
+#3CBCFC,Bright Sky,21
+#6888FC,Cornflower,22
+#9878F8,Lavender,23
+#F878F8,Light Pink,24
+#F85898,Salmon,25
+#F87858,Light Salmon,26
+#FCA044,Light Orange,27
+#F8B800,Gold,28
+#B8F818,Yellow Green,29
+#58D854,Green,2A
+#58F898,Aqua,2B
+#00E8D8,Turquoise,2C
+#787878,Mid Gray,2D
+#000000,Black 6,2E
+#000000,Black 7,2F
+#FCFCFC,Pure White,30
+#A4E4FC,Pale Sky,31
+#B8B8F8,Pale Lavender,32
+#D8B8F8,Light Lavender,33
+#F8B8F8,Pink Pale,34
+#F8A4C0,Pale Salmon,35
+#F0D0B0,Cream,36
+#FCE0A8,Pale Cream,37
+#F8D878,Light Gold,38
+#D8F878,Pale Yellow,39
+#B8F8B8,Pale Green,3A
+#B8F8D8,Mint,3B
+#00FCFC,Aqua Bright,3C
+#F8D8F8,Mauve,3D
+#000000,Black 8,3E
+#000000,Black 9,3F

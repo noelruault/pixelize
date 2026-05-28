@@ -1,0 +1,6 @@
+/pixelize
+/dist/
+/tmp/
+*.test
+*.out
+.DS_Store

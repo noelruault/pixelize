@@ -1,0 +1,219 @@
+{
+  "width": 108,
+  "height": 128,
+  "total_pixels": 13824,
+  "unique_colors": 15,
+  "palette_size": 16,
+  "histogram": [
+    {
+      "index": 0,
+      "entry": {
+        "R": 27,
+        "G": 19,
+        "B": 14,
+        "Meta": {
+          "id": "01",
+          "name": "Ink Black",
+          "hex": "1B130E"
+        }
+      },
+      "count": 5916
+    },
+    {
+      "index": 1,
+      "entry": {
+        "R": 61,
+        "G": 42,
+        "B": 28,
+        "Meta": {
+          "id": "02",
+          "name": "Deep Bistre",
+          "hex": "3D2A1C"
+        }
+      },
+      "count": 2323
+    },
+    {
+      "index": 15,
+      "entry": {
+        "R": 156,
+        "G": 139,
+        "B": 87,
+        "Meta": {
+          "id": "16",
+          "name": "Antique Gold",
+          "hex": "9C8B57"
+        }
+      },
+      "count": 956
+    },
+    {
+      "index": 5,
+      "entry": {
+        "R": 217,
+        "G": 182,
+        "B": 140,
+        "Meta": {
+          "id": "06",
+          "name": "Ochre Light",
+          "hex": "D9B68C"
+        }
+      },
+      "count": 882
+    },
+    {
+      "index": 2,
+      "entry": {
+        "R": 92,
+        "G": 59,
+        "B": 34,
+        "Meta": {
+          "id": "03",
+          "name": "Burnt Umber",
+          "hex": "5C3B22"
+        }
+      },
+      "count": 822
+    },
+    {
+      "index": 13,
+      "entry": {
+        "R": 88,
+        "G": 110,
+        "B": 80,
+        "Meta": {
+          "id": "14",
+          "name": "Olive",
+          "hex": "586E50"
+        }
+      },
+      "count": 598
+    },
+    {
+      "index": 4,
+      "entry": {
+        "R": 178,
+        "G": 130,
+        "B": 92,
+        "Meta": {
+          "id": "05",
+          "name": "Caramel",
+          "hex": "B2825C"
+        }
+      },
+      "count": 536
+    },
+    {
+      "index": 14,
+      "entry": {
+        "R": 45,
+        "G": 61,
+        "B": 42,
+        "Meta": {
+          "id": "15",
+          "name": "Forest Shadow",
+          "hex": "2D3D2A"
+        }
+      },
+      "count": 455
+    },
+    {
+      "index": 11,
+      "entry": {
+        "R": 63,
+        "G": 91,
+        "B": 107,
+        "Meta": {
+          "id": "12",
+          "name": "Slate Blue",
+          "hex": "3F5B6B"
+        }
+      },
+      "count": 350
+    },
+    {
+      "index": 6,
+      "entry": {
+        "R": 243,
+        "G": 221,
+        "B": 178,
+        "Meta": {
+          "id": "07",
+          "name": "Ivory Warm",
+          "hex": "F3DDB2"
+        }
+      },
+      "count": 337
+    },
+    {
+      "index": 12,
+      "entry": {
+        "R": 31,
+        "G": 58,
+        "B": 75,
+        "Meta": {
+          "id": "13",
+          "name": "Prussian Blue",
+          "hex": "1F3A4B"
+        }
+      },
+      "count": 238
+    },
+    {
+      "index": 3,
+      "entry": {
+        "R": 139,
+        "G": 90,
+        "B": 43,
+        "Meta": {
+          "id": "04",
+          "name": "Raw Sienna",
+          "hex": "8B5A2B"
+        }
+      },
+      "count": 207
+    },
+    {
+      "index": 10,
+      "entry": {
+        "R": 230,
+        "G": 162,
+        "B": 76,
+        "Meta": {
+          "id": "11",
+          "name": "Saffron",
+          "hex": "E6A24C"
+        }
+      },
+      "count": 113
+    },
+    {
+      "index": 7,
+      "entry": {
+        "R": 250,
+        "G": 241,
+        "B": 221,
+        "Meta": {
+          "id": "08",
+          "name": "Linen",
+          "hex": "FAF1DD"
+        }
+      },
+      "count": 89
+    },
+    {
+      "index": 9,
+      "entry": {
+        "R": 194,
+        "G": 75,
+        "B": 58,
+        "Meta": {
+          "id": "10",
+          "name": "Vermilion",
+          "hex": "C24B3A"
+        }
+      },
+      "count": 2
+    }
+  ]
+}

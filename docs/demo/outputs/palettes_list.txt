@@ -1,0 +1,7 @@
+gameboy                        (embedded)
+lego                           (embedded)
+lego-grayscale                 (embedded)
+nes                            (embedded)
+pico8                          (embedded)
+tol-bright                     (embedded)
+wong                           (embedded)

@@ -84,7 +84,19 @@ cpu="$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | sed 's/^ 
 [ -z "$cpu" ] && cpu="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo unknown)"
 cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo '?')"
 
+# Commit header. Benchmark results are stored alongside commits, so every run
+# stamps the commit it measured. A dirty tree is flagged, because then the
+# numbers do not correspond to any committed state.
+commit_full="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+commit_short="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+commit_subject="$(git log -1 --format='%s' 2>/dev/null || echo unknown)"
+tree_state="clean"
+[ -n "$(git status --porcelain 2>/dev/null)" ] && tree_state="DIRTY (uncommitted changes; numbers are not a committed state)"
+
 echo
+echo "commit:      $commit_short  $commit_subject"
+echo "commit-sha:  $commit_full"
+echo "tree:        $tree_state"
 echo "machine:     $(uname -sm), ${cores} cores"
 echo "cpu:         $cpu"
 echo "images:      ${#IMAGES[@]} from $SRC_DIR"

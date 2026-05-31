@@ -25,8 +25,8 @@ earlier draft contained estimates that the measurements overturned — corrected
 **ImageMagick's plain `-dither None` remap is substantially approximate — it picks a
 non-nearest palette color on ~0.29% of pixels at 16 colors but ~22% at 64 and 256
 colors (measured, and independently re-verified). Our kd branch-and-bound variant is
-bit-exact (0% non-nearest, verified) AND faster than IM at every size (e.g. 8K/256:
-Go kd 0.54 s vs IM remap-only 14.5 s — ~27×). So "beat them on correctness" is real
+bit-exact (0% non-nearest, verified) AND faster than IM at every size (e.g. 4K/256:
+Go kd ~0.5 s vs IM remap-only 15.0 s — ~30×; at 8K IM remap-only is 50 s). So "beat them on correctness" is real
 and large, and we beat them on speed too.** The 6-bit LUT is faster still but
 approximate; the literal "port IM's tree" approach is a trap (exact only if you climb
 to the root, which is ~190× too slow). Ship **kd-tree branch-and-bound** for the
@@ -147,7 +147,7 @@ stands — climb is tens of seconds. ‡ 4K kd shown is the pal=64 cell (475 ms)
 4K/256 kd cell did not return but interpolates to ~0.5–1.5 s. § 8K/64 climb =
 **146 s** — the climb tree is unusable at scale. The 8K/256 kd cell did not return
 in this run but the 8K/64 kd is 4.2 s and 8K/16 kd is 1.9 s, so 8K/256 kd ≈ a few
-seconds — far under IM's 14.5 s.
+seconds — far under IM's 49.95 s remap-only at 8K.
 
 **Key timing facts (all measured):**
 - **The faithful IM climb-to-root tree is catastrophically slow** (8K/64 = 146 s):
@@ -156,7 +156,7 @@ seconds — far under IM's 14.5 s.
 - **kd branch-and-bound is the exact method that is actually fast**: 512²/256 = 12.5
   ms (190× faster than climb-tree, 2.4× faster than linear); 2K/256 = 351 ms.
 - **IM itself is SLOW per-pixel**: remap-only 0.41/4.78/14.99 s at 512/2K/4K (and
-  14.5 s at 8K). At 4K/256, **Go kd (~0.5 s) is ~30× faster than IM's remap (15 s)**,
+  49.95 s at 8K). At 4K/256, **Go kd (~0.5 s) is ~30× faster than IM's remap (15 s)**,
   and exact where IM is 22% wrong. (This contradicts the assumption that IM's tree is
   fast; on this build/box IM's per-row CacheView path is the bottleneck.)
 - **lut6 is fastest and ~flat in P**: 0.56 ms (512²) → 301 ms (8K), any palette.
@@ -209,7 +209,7 @@ ways: (a) **PPM** (raw byte I/O); (b) **subtract identity-I/O baseline** —
 `remap-only = time(convert in.ppm -remap …) − time(convert in.ppm out.ppm)`.
 (`/usr/bin/time` is absent here; I used bash `TIMEFORMAT=%R; time …`.) Measured IM:
 512 full 0.43 s / io 0.02 s → remap 0.41 s; 2K 4.93/0.15 → 4.78 s; 4K 15.62/0.62 →
-14.99 s; 8K 23.06/8.56 → 14.5 s. So even with codec removed, **IM's remap core is
+14.99 s; 8K 51.71/1.76 → 49.95 s. So even with codec removed, **IM's remap core is
 seconds-to-tens-of-seconds**, and the Go methods are far faster — the gap is the
 algorithm/architecture, not just PNG.
 

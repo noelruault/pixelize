@@ -194,12 +194,16 @@ Color matching goes through a `DistanceFunc`. The default is the standard librar
 
 ## Benchmark
 
-<!-- Benchmark numbers pending. To populate:
-     1. Capture:  go test -bench=. -benchmem ./...   (add Benchmark functions first)
-     2. Compare against: ImageMagick `convert -remap` for the same palette and size
-     3. Format: metric | value | baseline | capture date -->
+These numbers compare pixelize against ImageMagick on the same quantization task: reduce one image to the NES palette, no resize, no dithering, the same input pixels for both. The image is pre-resized once so the resize step is not part of the timing, and both tools target the same palette. Reproduce with `bench/compare.sh`.
 
-There are no published benchmark numbers yet. The block above is a placeholder with instructions for capturing them.
+| Input | pixelize wall / CPU | ImageMagick wall / CPU | Pixels differing |
+| --- | --- | --- | --- |
+| 256x256 | 47 ms / 49 ms | 63 ms / 178 ms | 3,244 of 65,536 (5%) |
+| 512x512 | 180 ms / 184 ms | 204 ms / 549 ms | 13,409 of 262,144 (5%) |
+
+pixelize is faster on elapsed time at both sizes, and it uses about 3x less CPU. It quantizes on one thread, while ImageMagick spreads the same work across several cores. The two outputs land on the same color for about 95% of pixels. The other 5% is each tool's nearest-color choice, since they are separate implementations.
+
+Measured on a shared cloud container (Linux x86_64, Intel Xeon at 2.80GHz, 4 cores), ImageMagick 6.9.12 Q16, Go 1.25.0, 50 runs per cell, on 2026-05-31. This was a virtualized, shared machine, so treat the absolute numbers as indicative rather than tuned. The ratio between the two tools holds up better than either raw number. Run `bench/compare.sh` to get numbers for your own hardware; it prints the machine, cores, and tool versions it ran on. A Q8 ImageMagick build narrows the CPU gap.
 
 ## Contributing
 

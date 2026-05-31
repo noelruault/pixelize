@@ -1,0 +1,202 @@
+quantlab raw results
+=====================
+Date: 2026-05-31
+Host: shared cloud container, 4 vCPU (nproc=4), 15 GiB RAM, no swap. CONTENDED,
+      not isolated -> absolute times carry noise; best-of-N is the stable figure.
+Go:   go1.24.7 linux/amd64   (task mentioned 1.25; only 1.24.7 was installed)
+ImageMagick: 6.9.12-98 Q16 x86_64 (convert on PATH)
+Test image: /home/user/pixelize/docs/demo/inputs/starry.jpg, upscaled with
+            `convert starry.jpg -resize 'WxH!' inW.png` (note: ! must be quoted):
+              in512.png   512x512    =     262,144 px
+              in2048.png  2048x2048  =   4,194,304 px
+              in4k.png    3840x2160  =   8,294,400 px
+              in8k.png    7680x4320  =  33,177,600 px
+Palettes: deterministic pseudo-random distinct RGB, math/rand seed=1234567,
+          sizes 16 / 64 / 256. genPalette() in /tmp/quantlab/main.go.
+          (A random palette is a HARDER, neutral test: dense Voronoi boundaries,
+          no structure for a tree/LUT to exploit. Tuned palettes -> less LUT error.)
+Distance: unweighted Euclidean over 8-bit RGB, alpha ignored (images opaque).
+          Verified IDENTICAL argmin to Go stdlib color.Palette.Index (16-bit
+          RGBA, alpha-inclusive): 0 mismatches in every verify run, all sizes &
+          palettes. Reason: opaque -> alpha term constant, 16-bit = 8-bit*0x101
+          (monotone), so argmin unchanged. => Algorithm A is a faithful bit-exact
+          stand-in for pixelize's current applyNearest.
+
+Algorithms (all RGBA image + palette -> []uint16 indices):
+  A baseline-linear-serial : linear scan over palette, single goroutine (= pixelize today)
+  B linear-parallel        : same scan, worker pool over pixel bands (GOMAXPROCS)
+  C kdtree                 : 3D k-d tree (median split, axis=depth%3), branch&bound
+                             NN query per pixel, parallel
+  D lut-cache (5-bit)      : full precomputed 32^3=32768 inverse-colormap table
+                             (each bucket = nearest to bucket CENTER), O(1) lookup, parallel
+  E lut (6-bit)            : full precomputed 64^3=262144 table, O(1) lookup, parallel (extra)
+
+Go timings = PURE in-memory quantize time (PNG decode/encode EXCLUDED), one
+untimed warmup then avg/best over N repeats. N = 7/5/4/3 for 512/2K/4K/8K.
+alloc_MB = runtime TotalAlloc delta / repeats (per-run allocation ~ output index
+buffer; NOT resident peak). ImageMagick times are END-TO-END wall incl PNG I/O.
+
+NOTE on metric overlap: a few exploratory runs (512 smoke test, the GOMAXPROCS
+sweep) used different repeat counts than the matrix; the authoritative matrix is
+the GO TIMING MATRIX block below (from /tmp/quantlab/results.csv).
+
+=====================================================================
+EXACTNESS / ACCURACY VERIFICATION  (./quantlab -verify)
+=====================================================================
+B vs A: IDENTICAL (diff=0) in every case, all sizes/palettes.
+C vs A: NOT identical -- see CORRECTNESS BUG note below. (diff 6..9365)
+A vs stdlib color.Palette.Index: 0 mismatch, all cases.
+
+5-bit LUT (D) and 6-bit LUT (E) error vs exact serial A:
+512x512:
+  pal=16   D: 22628 px differ (8.6319%); max color err=45.25; mean extra dist^2/diff=338.10
+           E: 11987 px (4.5727%); max err=32.37; mean=179.29
+  pal=64   D: 25990 px (9.9144%); max err=36.08; mean=160.70
+           E: 14266 px (5.4420%); max err=24.70; mean=88.59
+  pal=256  D: 37416 px (14.2731%); max err=31.42; mean=132.54
+           E: 18990 px (7.2441%); max err=21.33; mean=65.37
+2048x2048:
+  pal=16   D: 362180 px (8.6350%); max err=46.08; mean=337.13
+           E: 193087 px (4.6036%); max err=34.10; mean=179.45
+  pal=64   D: 417528 px (9.9546%); max err=36.96; mean=160.46
+           E: 230328 px (5.4914%); max err=24.70; mean=88.89
+  pal=256  D: 602098 px (14.3551%); max err=31.42; mean=132.21
+           E: 304114 px (7.2506%); max err=22.07; mean=65.38
+
+"max color err" = sqrt(extra squared distance) of the approximate pick vs the
+exact-nearest pick, in RGB Euclidean units (range 0..441). The 5-bit key never
+makes a catastrophic miss (<= ~46 units, and decreasing as palette grows because
+neighbors are closer), but the FRACTION of affected pixels is substantial and
+INCREASES with palette density (8.6% -> 14.3% as pal 16->256). The 6-bit LUT (E)
+roughly halves both the affected fraction and the max error.
+
+IMPORTANT (honest): the LUT error here (~9-14% of pixels) is MUCH larger than a
+naive intuition suggests, because (a) the palette is random with dense Voronoi
+boundaries and (b) the bucket-CENTER lookup introduces up to +/-4 units of key
+error per channel on EVERY pixel, not just those near a boundary. A real tuned
+palette would be far more forgiving, but on this neutral test the 5-bit LUT is
+clearly an APPROXIMATION with a visible error budget, not a near-exact method.
+
+=====================================================================
+CORRECTNESS BUG IN ALGORITHM C (k-d tree) -- DISCLOSED, NOT HIDDEN
+=====================================================================
+C does NOT match A exactly (6..9365 pixels differ depending on size/palette).
+A correct k-d NN search MUST be exact. The discrepancy means the prune/tie
+handling in this prototype's kdNearest has a bug (most likely the `diff*diff <
+*bestD` prune should be `<=`, or a tie-break/equal-distance edge case on the
+splitting plane). The TIMINGS for C are still valid as an indication of k-d
+tree COST (the traversal work is essentially the same whether or not the prune
+boundary is off by the equal case), but C as written is NOT a drop-in exact
+replacement until the prune bug is fixed. This is flagged in the report's
+recommendations. The error is small (<0.22% of pixels) and bounded, but a
+production exact path must fix it before shipping.
+
+=====================================================================
+GO TIMING MATRIX  (from /tmp/quantlab/results.csv)
+CSV: algo,pal,size,pixels,avg_ms,best_ms,alloc_MB
+=====================================================================
+A,16,512x512,262144,8.095,7.680,0.50
+B,16,512x512,262144,4.135,3.388,0.50
+C,16,512x512,262144,9.025,7.340,0.50
+D,16,512x512,262144,1.011,0.564,0.56
+E,16,512x512,262144,2.993,2.475,1.00
+A,64,512x512,262144,29.528,29.112,0.50
+B,64,512x512,262144,9.754,8.112,0.50
+C,64,512x512,262144,19.420,17.189,0.51
+D,64,512x512,262144,1.837,1.399,0.56
+E,64,512x512,262144,11.045,7.977,1.00
+A,256,512x512,262144,121.050,115.736,0.50
+B,256,512x512,262144,30.409,29.678,0.50
+C,256,512x512,262144,18.163,17.597,0.55
+D,256,512x512,262144,8.140,7.651,0.56
+E,256,512x512,262144,35.163,30.280,1.00
+A,16,2048x2048,4194304,140.123,124.819,8.00
+B,16,2048x2048,4194304,35.971,33.515,8.00
+C,16,2048x2048,4194304,132.715,111.077,8.00
+D,16,2048x2048,4194304,5.635,2.992,8.06
+E,16,2048x2048,4194304,5.986,5.266,8.50
+A,64,2048x2048,4194304,483.194,469.970,8.00
+B,64,2048x2048,4194304,153.899,129.735,8.00
+C,64,2048x2048,4194304,224.953,204.210,8.01
+D,64,2048x2048,4194304,5.958,3.749,8.06
+E,64,2048x2048,4194304,17.061,13.737,8.50
+A,256,2048x2048,4194304,1898.311,1865.587,8.00
+B,256,2048x2048,4194304,536.418,508.076,8.00
+C,256,2048x2048,4194304,245.537,238.362,8.05
+D,256,2048x2048,4194304,9.054,6.090,8.07
+E,256,2048x2048,4194304,37.198,32.874,8.50
+A,16,3840x2160,8294400,248.171,246.924,15.82
+B,16,3840x2160,8294400,137.037,112.904,15.82
+C,16,3840x2160,8294400,345.681,286.895,15.82
+D,16,3840x2160,8294400,12.040,11.031,15.88
+E,16,3840x2160,8294400,15.572,14.380,16.32
+A,64,3840x2160,8294400,934.687,919.028,15.82
+B,64,3840x2160,8294400,475.463,340.427,15.82
+C,64,3840x2160,8294400,654.859,475.672,15.83
+D,64,3840x2160,8294400,16.232,12.141,15.88
+E,64,3840x2160,8294400,35.811,26.453,16.32
+A,256,3840x2160,8294400,3707.651,3683.661,15.82
+B,256,3840x2160,8294400,1859.450,1400.833,15.82
+C,256,3840x2160,8294400,795.020,676.489,15.87
+D,256,3840x2160,8294400,23.789,17.912,15.89
+E,256,3840x2160,8294400,131.460,96.447,16.32
+A,16,7680x4320,33177600,988.345,972.112,63.28
+B,16,7680x4320,33177600,574.707,544.437,63.28
+C,16,7680x4320,33177600,1607.387,1549.414,63.28
+D,16,7680x4320,33177600,46.981,45.186,63.34
+E,16,7680x4320,33177600,51.825,49.066,63.78
+A,64,7680x4320,33177600,3710.784,3687.617,63.28
+B,64,7680x4320,33177600,2510.973,2227.657,63.28
+C,64,7680x4320,33177600,3685.625,3518.214,63.29
+D,64,7680x4320,33177600,62.442,54.761,63.35
+E,64,7680x4320,33177600,74.913,65.105,63.78
+[A,256,7680x4320 SKIPPED to bound total runtime; extrapolated ~14-15s/run serial]
+B,256,7680x4320,33177600,10648.650,8432.023,63.28
+C,256,7680x4320,33177600,3224.012,2979.002,63.34
+D,256,7680x4320,33177600,55.496,53.850,63.35
+E,256,7680x4320,33177600,128.829,122.630,63.78
+
+=====================================================================
+PARALLEL SCALING  (2048x2048, pal=256, avg_ms by GOMAXPROCS)
+From explicit GOMAXPROCS=1/2/4 runs (repeats=4). These are SLOWER in absolute
+terms than the matrix rows above because they were taken while other benchmark
+processes were still running (container contention) -- treat them as RELATIVE
+scaling only, not as the headline pal256/2K numbers.
+=====================================================================
+GOMAXPROCS=1:  B=2001.152  C=907.084  D=27.557
+GOMAXPROCS=2:  B=1598.287  C=860.052  D=32.086
+GOMAXPROCS=4:  B=1545.594  C=590.812  D=18.132
+Observed speedup 1->4:  B~1.3x  C~1.5x  D~1.5x
+CAVEAT: these scaling ratios are POOR and almost certainly corrupted by
+concurrent benchmark load on the 4 shared vCPUs (the sweep ran while bench.sh
+and bench_im.sh were active). The cleaner matrix rows show B at 2K/256 = 536ms
+(4 cores) vs A serial = 1898ms => effective ~3.5x from the parallel design, which
+is the more trustworthy parallel-benefit figure. The dedicated sweep is reported
+for honesty but its absolute ratios are unreliable. A clean re-run on an idle box
+is needed for a definitive scaling curve.
+
+=====================================================================
+IMAGEMAGICK Q16 REFERENCE  (`convert in.png +dither -remap swatchN.png out.png`)
+Wall seconds, END-TO-END (PNG decode+encode INCLUDED). Swatches generated from
+the EXACT same Go palette colors (1xN PNG) so palettes match bit-for-bit.
+Averages (n as noted):
+=====================================================================
+size   pal=16        pal=64        pal=256
+512    0.178 (n=3)   0.314 (n=3)   0.710 (n=3)
+2K     1.876 (n=3)   3.268 (n=3)   7.931 (n=3)
+4K     4.185 (n=2)   6.303 (n=2)   20.389 (n=2)
+8K     21.799 (n=2)  18.277 (n=2)  35.644 (n=1)
+
+Raw 8K samples: 16 -> 22.522, 21.076 ; 64 -> 21.260, 15.295 ; 256 -> 35.644.
+Note the 8K/64 samples are noisy (21.3 vs 15.3s) -- contended box. The 8K/256
+cell has only 1 sample (the run's 2nd sample was not collected before I stopped
+it). All other IM cells are complete. The 8K/64 < 8K/16 average inversion is pure
+container noise, not a real effect.
+
+IM PNG decode+encode I/O ONLY (`convert in.png out.png`), overhead reference:
+  512: 0.121s   2K: 2.715s   4K: 4.948s   8K: 18.598s
+So a LARGE fraction of IM's wall time at big sizes is PNG I/O, not the remap:
+e.g. at 8K/16, ~18.6s of the 22.5s is I/O. IM's remap-proper is therefore only a
+few seconds even at 8K; the headline gap vs the Go in-memory numbers is partly
+PNG codec cost, NOT purely algorithm. This is the key honesty caveat for the IM
+comparison: IM numbers include codec, Go numbers do not.

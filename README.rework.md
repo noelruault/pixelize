@@ -194,16 +194,28 @@ Color matching goes through a `DistanceFunc`. The default is the standard librar
 
 ## Benchmark
 
-These numbers compare pixelize against ImageMagick on the same quantization task: reduce one image to the NES palette, no resize, no dithering, the same input pixels for both. The image is pre-resized once so the resize step is not part of the timing, and both tools target the same palette. Reproduce with `bench/compare.sh`.
+The same quantization task in both tools: take an image, reduce it to a fixed palette, write a PNG. Both get the same input pixels at the same size, neither resizes, neither dithers, and both target the same palette, so the only thing measured is each tool's nearest-color step. Numbers are milliseconds per run as wall time / CPU time, averaged over six images, lower is better. ImageMagick is shown at quantum depth Q16 and Q8. Reproduce with `bench/compare.sh`.
 
-| Input | pixelize wall / CPU | ImageMagick wall / CPU | Pixels differing |
-| --- | --- | --- | --- |
-| 256x256 | 47 ms / 49 ms | 63 ms / 178 ms | 3,244 of 65,536 (5%) |
-| 512x512 | 180 ms / 184 ms | 204 ms / 549 ms | 13,409 of 262,144 (5%) |
+| Palette | Colors | Size | pixelize | ImageMagick Q16 | ImageMagick Q8 | Output diff |
+| --- | --- | --- | --- | --- | --- | --- |
+| Game Boy | 4 | 256x256 | 17 / 19 | 20 / 56 | 27 / 59 | 0.1% |
+| Game Boy | 4 | 512x512 | 64 / 68 | 51 / 121 | 54 / 112 | 0.1% |
+| NES | 55 | 256x256 | 43 / 46 | 50 / 140 | 55 / 136 | 3.0% |
+| NES | 55 | 512x512 | 162 / 167 | 156 / 406 | 151 / 377 | 3.0% |
+| lego | 162 | 256x256 | 89 / 92 | 45 / 125 | 51 / 125 | 13.2% |
+| lego | 162 | 512x512 | 343 / 349 | 129 / 332 | 132 / 323 | 13.2% |
 
-pixelize is faster on elapsed time at both sizes, and it uses about 3x less CPU. It quantizes on one thread, while ImageMagick spreads the same work across several cores. The two outputs land on the same color for about 95% of pixels. The other 5% is each tool's nearest-color choice, since they are separate implementations.
+What the numbers say, plainly:
 
-Measured on a shared cloud container (Linux x86_64, Intel Xeon at 2.80GHz, 4 cores), ImageMagick 6.9.12 Q16, Go 1.25.0, 50 runs per cell, on 2026-05-31. This was a virtualized, shared machine, so treat the absolute numbers as indicative rather than tuned. The ratio between the two tools holds up better than either raw number. Run `bench/compare.sh` to get numbers for your own hardware; it prints the machine, cores, and tool versions it ran on. A Q8 ImageMagick build narrows the CPU gap.
+- On small palettes, which is the common pixel-art case, pixelize is competitive on wall time and uses much less CPU, because it runs on one thread while ImageMagick spreads work across cores.
+- On the large lego palette, ImageMagick is about 2 to 2.6x faster than pixelize at every size. pixelize does a linear nearest-color scan, so its cost grows with the number of palette colors. ImageMagick scales better as the palette grows. If you mostly use large palettes, ImageMagick is faster today.
+- As the image grows to 512x512, ImageMagick's threading lets it match or beat pixelize on wall time even for small palettes, though pixelize still uses less CPU there.
+- The two outputs agree more when the palette is smaller: about 0.1% of pixels differ at 4 colors, 3% at 55, and 13% at 162. The difference is each tool's nearest-color choice, since they are separate implementations.
+- Q8 versus Q16 made little difference here, inside the run to run noise. One caveat on that column: the Q8 binary was built from source while the Q16 is the distribution package, so build options differ on top of the quantum depth.
+
+The "Colors" column counts distinct colors. The lego palette ships 188 entries, but some are duplicates, which leaves 162 distinct colors, and the NES palette's 64 entries leave 55.
+
+Measured on a shared cloud container (Linux x86_64, Intel Xeon at 2.80GHz, 4 cores), ImageMagick 6.9.12, Go 1.25.0, 10 runs per image per cell, on 2026-05-31. This was a virtualized, shared machine, so treat the absolute numbers as indicative rather than tuned. The ratios between tools survive the noise better than the raw values. Run `bench/compare.sh` to get numbers for your own hardware; it prints the machine, cores, and tool versions it ran on.
 
 ## Contributing
 

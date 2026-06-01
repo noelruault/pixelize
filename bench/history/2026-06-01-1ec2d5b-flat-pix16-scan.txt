@@ -1,0 +1,51 @@
+commit:      1ec2d5b  perf: swap nearest-color scan to flat-Pix16 (report 08 winner)
+commit-sha:  1ec2d5b8e51ab3f3e3d8e3e3b8df3b001bb6ec45
+prior:       9264082 (parallel At-based scan) -- this entry's baseline
+date:        2026-06-01T11:22:13Z
+machine:     Linux x86_64, 4 cores
+cpu:         Intel(R) Xeon(R) Processor @ 2.10GHz
+go:          go1.25.0
+scope:       Phase 1 task 2.1 follow-up -- flat-Pix16 scan (research report 08 winner)
+
+what/why
+--------
+Replace At()/cp.Index()/SetRGBA() per-pixel scan with flat src.Pix reads,
+precomputed 16-bit palette table + indexRaw (bit-identical to
+color.Palette.Index), flat out.Pix writes, per-worker []int usage counts.
+Public Indices [][]int preserved (no API change, no flat-index RAM regression).
+
+exactness (gate 1: no exact path may become non-exact)
+------------------------------------------------------
+go test -run TestParallelMatchesSerial -race : PASS
+  0 differing image pixels / indices / usage vs the color.Palette.Index serial
+  reference, across {16x16,255x257,512x512,300x1} x P{1,16,64,256} x {stdlib,euclidean}.
+  Bit-identical for non-opaque alpha too (RGBA()=v|v<<8, alpha term carried).
+go test ./ (golden hashes) : PASS. No data race.
+
+speed (in-process Go benchmark, randomImage noise, best-of-N)
+------------------------------------------------------------
+cell        prior At (4c)  flat-Pix16 (4c)  speedup vs prior
+2K / P256   1.798 s/op     1.224 s/op       1.47x
+2K / P16    0.341 s/op     0.170 s/op       2.01x
+8K / P16    (n/r prior)    1.613 s/op       --
+scaling 2K/P256: 1 core 4.810 s -> 4 core 1.224 s = 3.93x
+
+efficiency gate (gate 4: wall-clock star; time gain >= resource increase)
+-------------------------------------------------------------------------
+PASS, strictly. flat-Pix16 is faster AND lighter on every axis:
+  allocs/op @2K : ~4,196,668 (prior) -> ~2,080 (now)   [~2000x fewer]
+  B/op @2K      : higher (prior, per-pixel iface boxing) -> 50.4 MB (now)
+  B/op @8K      : 447 MB (now)
+  residual ~2,080 allocs = the 2,048 [][]int column slices + output, not
+  per-pixel garbage. Total CPU work DOWN (fewer allocs => less GC), wall time
+  DOWN. No resource increased, so the gate is satisfied with margin.
+
+notes
+-----
+- Combined with the parallel win (9264082), ~5.5-7x over the original serial
+  At-based scan.
+- Biggest gains at small palettes (At() boxing was the bottleneck there); at
+  P256 the 256-entry inner scan dominates so the mechanics win shrinks (still 1.47x).
+- Shared 4-vCPU container: absolute ms +-10-15%; ratios are the trustworthy figure.
+- regression gate vs prior entry (9264082): faster in every comparable cell, 0
+  exactness regressions. PASS.

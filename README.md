@@ -240,9 +240,10 @@ Color matching goes through a `DistanceFunc`. The default is the standard librar
 
 Same task in both tools: reduce an image to a fixed palette and write a PNG — same
 input pixels, same size, no resize, no dither — so the only thing measured is each
-tool's nearest-color step. pixelize is **exact** (always the true nearest color);
-ImageMagick's remap is **approximate**, so the last column is the share of pixels
-where the two disagree. Reproduce with `bench/compare.sh`.
+tool's nearest-color step. pixelize always picks the **true nearest** color;
+ImageMagick's remap is approximate, so the **Output diff** column is ImageMagick's
+error rate — the share of pixels it sends to a non-nearest color. Reproduce with
+`bench/compare.sh`.
 
 **Speed & CPU** — milliseconds per run, `wall / CPU`, averaged over six images,
 lower is better. "Speedup" is wall time, pixelize vs ImageMagick.
@@ -264,12 +265,9 @@ lower is better. "Speedup" is wall time, pixelize vs ImageMagick.
 | 2048 px wide | ~57 MiB | ~68 MiB |
 
 In short: pixelize is **faster on every cell in both wall and CPU time, uses less
-memory, and stays exact.** Because pixelize is provably exact (every pixel gets its
-true nearest color), the "Output diff" column is really *ImageMagick's error rate* —
-the share of pixels where it picks a non-nearest color — and that error grows with
-the palette: ~0.1% at 4 colors, 3% at 55, **13% at 162**. The "Colors" column is
-distinct colors: lego ships 188 entries (162 distinct), the NES palette 64 (55
-distinct).
+memory, and stays exact** — while ImageMagick's error rate climbs with the palette:
+~0.1% at 4 colors, 3% at 55, **13% at 162**. The "Colors" column is distinct colors:
+lego ships 188 entries (162 distinct), the NES palette 64 (55 distinct).
 
 Measured on a shared cloud container (Linux x86_64, Intel Xeon @ 2.80 GHz, 4 cores),
 ImageMagick 6.9.12, Go 1.25.0, on 2026-06-01. It is a virtualized, shared machine,

@@ -73,6 +73,22 @@ type ApplyOptions struct {
 	// Distance overrides the nearest-color metric. nil means stdlib
 	// unweighted Euclidean (color.Palette.Index).
 	Distance DistanceFunc
+
+	// Fast selects the approximate Fast mode (a 6-bit color LUT) for the
+	// default metric. It trades a small accuracy loss (~2-6% of pixels get a
+	// non-nearest color) for a per-pixel cost of one table lookup. Building
+	// the LUT is only worthwhile when reused across many images against a
+	// fixed palette; for a single image, set FastLUT instead or leave Fast
+	// off (the exact path is already fast and more accurate). Ignored when
+	// Dither is set or a custom Distance is given.
+	Fast bool
+
+	// FastLUT supplies a prebuilt Fast-mode table (see Palette.NewFastLUT) to
+	// reuse across calls, which is where Fast mode actually pays off (batch,
+	// watch): build once, pass it to every Apply. When set it takes
+	// precedence over Fast and skips the per-call build. Ignored when Dither
+	// is set or a custom Distance is given.
+	FastLUT *FastLUT
 }
 
 // Pattern is the result of Apply.
@@ -105,6 +121,16 @@ func (p Palette[M]) Apply(ctx context.Context, img image.Image, opts ApplyOption
 
 	if opts.Dither {
 		return p.applyDither(ctx, resized)
+	}
+	// Fast mode applies only to the default metric (the LUT is built on it)
+	// and not under dithering.
+	if opts.Distance == nil {
+		if opts.FastLUT != nil {
+			return p.applyLUT(ctx, resized, opts.FastLUT)
+		}
+		if opts.Fast {
+			return p.applyLUT(ctx, resized, p.NewFastLUT())
+		}
 	}
 	return p.applyNearest(ctx, resized, opts.Distance)
 }
@@ -245,8 +271,23 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 		}
 	}
 
-	// Serial path for small images: goroutine setup would cost more than it
-	// saves, and a cancellable ctx can be checked per row.
+	usage, err := runScan(ctx, src, nColors, scanBand)
+	if err != nil {
+		return nil, err
+	}
+	return &Pattern[M]{Image: out, Palette: p, Indices: indices, Usage: usage}, nil
+}
+
+// runScan executes scanBand over src, serially for small images and row-band
+// parallel otherwise, and returns the merged sparse usage map. scanBand must
+// tally into the per-call counts slice (len == nColors) it is given; workers
+// each get a private counts slice, merged here, so scanBand needs no locking.
+// Band = h/GOMAXPROCS contiguous (report 08: finer bands lose to goroutine
+// churn). ctx is checked per row (serial) or once per band (parallel).
+func runScan(ctx context.Context, src *image.RGBA, nColors int, scanBand func(y0, y1 int, counts []int)) (map[int]int, error) {
+	b := src.Bounds()
+	w, h := b.Dx(), b.Dy()
+
 	if w*h < parallelMinPixels {
 		counts := make([]int, nColors)
 		for y := b.Min.Y; y < b.Max.Y; y++ {
@@ -255,15 +296,9 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 			}
 			scanBand(y, y+1, counts)
 		}
-		return &Pattern[M]{Image: out, Palette: p, Indices: indices, Usage: countsToUsage(counts)}, nil
+		return countsToUsage(counts), nil
 	}
 
-	// Parallel path: split rows into contiguous bands, one worker per band
-	// (band = h/GOMAXPROCS is optimal per report 08; finer bands lose to
-	// goroutine churn). Workers share only read-only state (src, tab, cp)
-	// plus disjoint output regions, index ranges, and a private []int count
-	// array each, so no locking is needed. The per-pixel decision is
-	// identical to the serial path, so the result is bit-for-bit the same.
 	workers := runtime.GOMAXPROCS(0)
 	if workers > h {
 		workers = h
@@ -314,13 +349,7 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 			total[idx] += n
 		}
 	}
-
-	return &Pattern[M]{
-		Image:   out,
-		Palette: p,
-		Indices: indices,
-		Usage:   countsToUsage(total),
-	}, nil
+	return countsToUsage(total), nil
 }
 
 // pal16 holds one palette color promoted to the 16-bit channel values that

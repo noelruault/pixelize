@@ -1,0 +1,57 @@
+commit:      dc06a92  perf: add bit-identical kd-tree exact path for large palettes (report 09)
+commit-sha:  dc06a92759b922e48cb3f74549155aa9d0ec158e
+prior:       1ec2d5b (flat-Pix16 linear scan) -- this entry's baseline for P>=128
+date:        2026-06-01T11:28:04Z
+machine:     Linux x86_64, 4 cores
+cpu:         Intel(R) Xeon(R) Processor @ 2.10GHz
+go:          go1.25.0
+scope:       Phase 2/3 -- bit-identical kd-tree exact path, gated P>=128 (report 09 winner)
+
+what/why
+--------
+Add a 3-D RGB kd-tree (median/cycle, inline color, <= prune + lowest-index
+tie-break) as the exact path for the default metric when P>=128 and the source
+is opaque. Bit-identical to color.Palette.Index. Linear flat-Pix16 stays the
+default for P<128, non-opaque sources, and custom metrics.
+
+exactness (gate 1)
+------------------
+go test -run TestParallelMatchesSerial -race : PASS
+  P in {1,16,64,127,128,256} x {opaque (kd active P>=128), alpha (kd disqualified)}
+  x {stdlib, euclidean} x 4 sizes. 0 differing pixels / indices / usage vs the
+  color.Palette.Index serial reference. No data race.
+go test ./ (golden hashes) : PASS
+
+speed (in-process Go benchmark, randomImage noise, best-of-N, 4 cores)
+---------------------------------------------------------------------
+cell        path                 time        note
+2K / P256   kd                   0.340 s/op  vs flat-Pix16 linear ~1.22 s (noisy-high sample)
+4K / P256   kd                   0.644 s/op
+2K / P128   kd (at gate)         0.271 s/op  } the crossover:
+2K / P127   linear (below gate)  0.696 s/op  } P127->P128 = 0.70 -> 0.27 s
+2K / P64    linear (control)     0.407 s/op  unchanged path
+  kd 2K/P256 0.340 s matches report 09's best-of-N 0.354 s; trust the report's
+  2.2-2.6x ratio over the clean parallel-linear bar (my single linear sample
+  ran noisy-high).
+
+efficiency gate (gate 4)
+------------------------
+PASS. kd is faster with only negligible extra memory: +~520 allocs/op at
+2K/P256 (2601 vs 2081) for the P=256 tree nodes + per-worker search scratch;
+B/op essentially unchanged (50.4 MB). Time down a lot, resources ~flat.
+
+threshold choice
+----------------
+kdExactMinPaletteSize=128, per report 09's fine P-sweep: P96 is a run-to-run
+coin-flip (gating kd there would be SLOWER half the time, violating the
+wall-clock star); P128 is the first P where kd wins on every image size in
+every run. Kept 128 deliberately over chasing the marginal 96-127 band.
+
+caveats
+-------
+- Opaque-only: kd drops the alpha term. Guarded by src.Opaque(); non-opaque
+  falls back to linear (verified bit-identical in the alpha test cases).
+- Custom non-decomposable metrics (e.g. CIEDE2000) never use kd.
+- Shared 4-vCPU container: absolute ms +-10-15%; ratios are the trustworthy figure.
+- regression gate vs prior: P<128 paths unchanged; P>=128 strictly faster; 0
+  exactness regressions. PASS.

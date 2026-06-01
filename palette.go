@@ -159,7 +159,12 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 	//   - custom metric: linear scan over dist, reading the pixel straight
 	//     from src.Pix into a color.RGBA (same value At() would yield).
 	useStdlib := dist == nil
-	useKD := useStdlib && nColors >= kdExactMinPaletteSize && src.Opaque()
+	opaque := src.Opaque()
+	useKD := useStdlib && nColors >= kdExactMinPaletteSize && opaque
+	// On the stdlib linear path, an opaque source lets us drop the alpha term
+	// (indexRawOpaque): bit-identical, ~25% less work per entry. Non-opaque
+	// sources must keep the full 4-channel indexRaw.
+	useStdlibOpaque := useStdlib && !useKD && opaque
 	var tree *kdTree
 	var tab []pal16
 	var cp color.Palette
@@ -197,6 +202,8 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 				switch {
 				case useKD:
 					return tree.match(&ks, pr, pg, pb)
+				case useStdlibOpaque:
+					return indexRawOpaque(pr, pg, pb, tab)
 				case useStdlib:
 					return indexRaw(pr, pg, pb, pa, tab)
 				default:
@@ -239,6 +246,16 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 			case useKD:
 				for xi := 0; xi < w; xi++ {
 					idx := tree.match(&ks, src.Pix[so], src.Pix[so+1], src.Pix[so+2])
+					e := p[idx]
+					out.Pix[oo], out.Pix[oo+1], out.Pix[oo+2], out.Pix[oo+3] = e.R, e.G, e.B, 255
+					indices[xi][yi] = idx
+					counts[idx]++
+					so += 4
+					oo += 4
+				}
+			case useStdlibOpaque:
+				for xi := 0; xi < w; xi++ {
+					idx := indexRawOpaque(src.Pix[so], src.Pix[so+1], src.Pix[so+2], tab)
 					e := p[idx]
 					out.Pix[oo], out.Pix[oo+1], out.Pix[oo+2], out.Pix[oo+3] = e.R, e.G, e.B, 255
 					indices[xi][yi] = idx
@@ -399,6 +416,37 @@ func indexRaw(pr, pg, pb, pa uint8, tab []pal16) int {
 	for i := range tab {
 		t := tab[i]
 		sum := sqDiff(cr, t.r) + sqDiff(cg, t.g) + sqDiff(cb, t.b) + sqDiff(ca, t.a)
+		if sum < bestSum {
+			if sum == 0 {
+				return i
+			}
+			ret, bestSum = i, sum
+		}
+	}
+	return ret
+}
+
+// indexRawOpaque is indexRaw with the alpha term dropped. It is bit-identical
+// to indexRaw (and so to color.Palette.Index) ONLY when the source pixel is
+// opaque: then sqDiff on the alpha channel is zero for every palette entry
+// (all built with a=255), so it cannot affect the argmin or any tie. Dropping
+// it is ~25% less distance work per entry — a measured ~1.3x on the small-P
+// opaque linear scan (the common retro-palette case), and the only regime that
+// uses this path, since opaque large-P routes to the kd-tree. Exactness is
+// guarded by TestParallelMatchesSerial (opaque, stdlib, P<kdExactMinPaletteSize)
+// against the cp.Index oracle on random noise.
+func indexRawOpaque(pr, pg, pb uint8, tab []pal16) int {
+	cr := uint32(pr)
+	cr |= cr << 8
+	cg := uint32(pg)
+	cg |= cg << 8
+	cb := uint32(pb)
+	cb |= cb << 8
+	ret := 0
+	bestSum := uint32(1<<32 - 1)
+	for i := range tab {
+		t := tab[i]
+		sum := sqDiff(cr, t.r) + sqDiff(cg, t.g) + sqDiff(cb, t.b)
 		if sum < bestSum {
 			if sum == 0 {
 				return i

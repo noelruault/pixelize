@@ -1,0 +1,61 @@
+building pixelize...
+
+commit:      351b950  docs: document -lut/-lookup-table bulk mode in DEMO.md
+commit-sha:  351b950f480d46d8c904a3120a7496a42c265f09
+tree:        clean
+machine:     Linux x86_64, 4 cores
+cpu:         Intel(R) Xeon(R) Processor @ 2.80GHz
+images:      6 from docs/demo/inputs
+runs:        8 per image per cell
+ImageMagick: ImageMagick 6.9.12-98 Q16 x86_64 18038 https://legacy.imagemagick.org
+go:          go1.25.0
+date:        2026-06-01T14:26:34Z
+
+ms per run, averaged over all images, lower is better. wall is elapsed; cpu is user + system.
+palette   colors  size       pixelize wall/cpu   ImageMagick wall/cpu  px vs ImageMagick diff
+gameboy   4       256x256    16/20               27/69               0.1%
+gameboy   4       512x512    47/59               61/140              0.1%
+nes       55      256x256    24/39               65/177              3.0%
+nes       55      512x512    74/133              200/514             3.0%
+lego      162     256x256    25/35               64/173              13.2%
+lego      162     512x512    79/121              185/481             13.2%
+
+## What changed and why
+
+This entry records the matcher change in 14544f4 (`perf: drop the alpha term on
+the opaque linear scan`). The benchmark binary above is 351b950, which is
+matcher-identical to 14544f4 (the commits between it and HEAD touch only docs,
+the CLI flag refactor, and the research log — never applyNearest).
+
+pixelize is faster than ImageMagick on every cell, in both wall and CPU time,
+while staying exact: the "px vs ImageMagick diff" column is ImageMagick's own
+non-nearest disagreement against pixelize's exact output (0.1% gameboy, 3.0% nes,
+13.2% lego) — i.e. IM approximates and pixelize does not, and pixelize is still
+~2-3x faster end-to-end.
+
+### Our own matcher microbench (bench_test.go, best-of-6, this box)
+
+Isolates the nearest-color matcher (no decode/resize/encode):
+
+  exact path:  gameboy(P4) 15.3   pico8(P16) 29.1   nes(P64) 83.6   lego(P188,kd) 60.6  ns/px
+  LUT path:    nes(P64) 12.5   lego(P188) 10.9  ns/px   (-lut/-lookup-table, P-independent)
+
+The opaque alpha-drop (this commit) on the small-P exact path, measured against
+the pre-change binary (best-of-6, parallel applyNearest):
+
+  palette  P    before(4ch)  after(3ch)  speedup
+  gameboy  4    18.43        17.04       1.08x
+  pico8    16   37.63        31.07       1.21x
+  nes      64   108.40       83.92       1.29x
+  lego     188  59.41        60.22       ~1.00x  (kd path, untouched)
+
+Bit-identical: the alpha-drop binary produced byte-for-byte identical PNGs to the
+pre-change binary across 20 image x palette combinations on the demo set, and
+TestParallelMatchesSerial confirms bit-identity vs the cp.Index oracle on random
+noise. The LUT path is the opt-in approximate bulk mode (report 11); it is
+P-independent and ~7x the exact small-P cost, which is why it only pays off when
+the table is built once and reused (batch/watch).
+
+Regression gate: exact paths report 0% non-nearest (golden + parallel + run-length
+tests, race-clean); the LUT stays inside its ~2-6% accuracy budget
+(TestFastLUTAccuracy).

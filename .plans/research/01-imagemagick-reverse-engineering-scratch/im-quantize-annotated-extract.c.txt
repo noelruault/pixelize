@@ -1,0 +1,225 @@
+116:%    E: the distance squared in RGB space between each pixel contained
+221:typedef struct _NodeInfo
+223:  struct _NodeInfo
+225:    *child[16];
+240:} NodeInfo;
+244:  NodeInfo
+251:typedef struct _CubeInfo
+253:  NodeInfo
+270:    distance,
+279:  NodeInfo
+316:} CubeInfo;
+321:static CubeInfo
+322:  *GetCubeInfo(const QuantizeInfo *,const size_t,const size_t);
+324:static NodeInfo
+325:  *GetNodeInfo(CubeInfo *,const size_t,const size_t,NodeInfo *);
+328:  AssignImageColors(Image *,CubeInfo *),
+329:  ClassifyImageColors(CubeInfo *,const Image *,ExceptionInfo *),
+330:  DitherImage(Image *,CubeInfo *),
+334:  ClosestColor(const Image *,CubeInfo *,const NodeInfo *),
+335:  DefineImageColormap(Image *,CubeInfo *,NodeInfo *),
+336:  DestroyCubeInfo(CubeInfo *),
+337:  PruneLevel(CubeInfo *,const NodeInfo *),
+338:  PruneToCubeDepth(CubeInfo *,const NodeInfo *),
+339:  ReduceImageColors(const Image *,CubeInfo *);
+417:%      MagickBooleanType AssignImageColors(Image *image,CubeInfo *cube_info)
+427:static inline void AssociateAlphaPixel(const CubeInfo *cube_info,
+451:static inline size_t ColorToNodeId(const CubeInfo *cube_info,
+480:static MagickBooleanType AssignImageColors(Image *image,CubeInfo *cube_info)
+533:        CubeInfo
+564:          const NodeInfo
+585:            if (node_info->child[id] == (NodeInfo *) NULL)
+587:            node_info=node_info->child[id];
+590:            Find closest color among siblings and their children.
+593:          cube.distance=(MagickRealType) (4.0*((MagickRealType) QuantumRange+
+595:          ClosestColor(image,&cube,node_info->parent);
+703:%    E: the distance squared in RGB space between each pixel contained
+709:%      MagickBooleanType ClassifyImageColors(CubeInfo *cube_info,
+720:static inline void SetAssociatedAlpha(const Image *image,CubeInfo *cube_info)
+733:static MagickBooleanType ClassifyImageColors(CubeInfo *cube_info,
+753:  NodeInfo
+821:          distance;
+829:        if (node_info->child[id] == (NodeInfo *) NULL)
+834:            node_info->child[id]=GetNodeInfo(cube_info,id,level,node_info);
+835:            if (node_info->child[id] == (NodeInfo *) NULL)
+848:        node_info=node_info->child[id];
+854:        distance=(double) (error.red*error.red+error.green*error.green+
+856:        if (IsNaN(distance) != 0)
+857:          distance=0.0;
+858:        node_info->quantize_error+=count*sqrt(distance);
+925:          distance;
+933:        if (node_info->child[id] == (NodeInfo *) NULL)
+938:            node_info->child[id]=GetNodeInfo(cube_info,id,level,node_info);
+939:            if (node_info->child[id] == (NodeInfo *) NULL)
+952:        node_info=node_info->child[id];
+958:        distance=(double) (error.red*error.red+error.green*error.green+
+960:        if (IsNaN(distance) != 0)
+961:          distance=0.0;
+962:        node_info->quantize_error+=count*sqrt(distance);
+1054:%  ClosestColor() traverses the color cube tree at a particular node and
+1057:%  The format of the ClosestColor method is:
+1059:%      void ClosestColor(const Image *image,CubeInfo *cube_info,
+1060:%        const NodeInfo *node_info)
+1068:%    o node_info: the address of a structure of type NodeInfo which points to a
+1072:static void ClosestColor(const Image *image,CubeInfo *cube_info,
+1073:  const NodeInfo *node_info)
+1079:    number_children;
+1082:    Traverse any children.
+1084:  number_children=cube_info->associate_alpha == MagickFalse ? 8UL : 16UL;
+1085:  for (i=0; i < (ssize_t) number_children; i++)
+1086:    if (node_info->child[i] != (NodeInfo *) NULL)
+1087:      ClosestColor(image,cube_info,node_info->child[i]);
+1093:        distance,
+1115:      distance=pixel*pixel;
+1116:      if (distance <= cube_info->distance)
+1119:          distance+=pixel*pixel;
+1120:          if (distance <= cube_info->distance)
+1123:              distance+=pixel*pixel;
+1124:              if (distance <= cube_info->distance)
+1129:                      distance+=pixel*pixel;
+1131:                  if (distance <= cube_info->distance)
+1133:                      cube_info->distance=distance;
+1199:%      void DefineImageColormap(Image *image,CubeInfo *cube_info,
+1200:%        NodeInfo *node_info)
+1208:%    o node_info: the address of a structure of type NodeInfo which points to a
+1212:static void DefineImageColormap(Image *image,CubeInfo *cube_info,
+1213:  NodeInfo *node_info)
+1216:    number_children;
+1222:    Traverse any children.
+1224:  number_children=cube_info->associate_alpha == MagickFalse ? 8UL : 16UL;
+1225:  for (i=0; i < (ssize_t) number_children; i++)
+1226:    if (node_info->child[i] != (NodeInfo *) NULL)
+1227:      DefineImageColormap(image,cube_info,node_info->child[i]);
+1305:%  DestroyCubeInfo() deallocates memory associated with an image.
+1307:%  The format of the DestroyCubeInfo method is:
+1309:%      DestroyCubeInfo(CubeInfo *cube_info)
+1313:%    o cube_info: the address of a structure of type CubeInfo.
+1316:static void DestroyCubeInfo(CubeInfo *cube_info)
+1327:    cube_info->node_queue->nodes=(NodeInfo *) RelinquishMagickMemory(
+1336:  cube_info=(CubeInfo *) RelinquishMagickMemory(cube_info);
+1391:%      MagickBooleanType DitherImage(Image *image,CubeInfo *cube_info)
+1441:static inline ssize_t CacheOffset(CubeInfo *cube_info,
+1460:static MagickBooleanType FloydSteinbergDither(Image *image,CubeInfo *cube_info)
+1493:    CubeInfo
+1581:          NodeInfo
+1594:            if (node_info->child[id] == (NodeInfo *) NULL)
+1596:            node_info=node_info->child[id];
+1599:            Find closest color among siblings and their children.
+1602:          cube.distance=(MagickRealType) (4.0*((MagickRealType) QuantumRange+
+1604:          ClosestColor(image,&cube,node_info->parent);
+1648:  RiemersmaDither(Image *,CacheView *,CubeInfo *,const unsigned int);
+1651:  CubeInfo *cube_info,const size_t level,const unsigned int direction)
+1777:  CubeInfo *cube_info,const unsigned int direction)
+1781:  CubeInfo
+1839:          NodeInfo
+1852:            if (node_info->child[id] == (NodeInfo *) NULL)
+1854:            node_info=node_info->child[id];
+1857:            Find closest color among siblings and their children.
+1860:          p->distance=(MagickRealType) (4.0*((MagickRealType) QuantumRange+
+1862:          ClosestColor(image,p,node_info->parent);
+1905:static MagickBooleanType DitherImage(Image *image,CubeInfo *cube_info)
+1958:%  GetCubeInfo() initialize the Cube data structure.
+1960:%  The format of the GetCubeInfo method is:
+1962:%      CubeInfo GetCubeInfo(const QuantizeInfo *quantize_info,
+1981:static CubeInfo *GetCubeInfo(const QuantizeInfo *quantize_info,
+1984:  CubeInfo
+1999:  cube_info=(CubeInfo *) AcquireMagickMemory(sizeof(*cube_info));
+2000:  if (cube_info == (CubeInfo *) NULL)
+2001:    return((CubeInfo *) NULL);
+2012:  cube_info->root=GetNodeInfo(cube_info,0,0,(NodeInfo *) NULL);
+2013:  if (cube_info->root == (NodeInfo *) NULL)
+2014:    return((CubeInfo *) NULL);
+2025:    return((CubeInfo *) NULL);
+2055:%  GetNodeInfo() allocates memory for a new node in the color cube tree and
+2058:%  The format of the GetNodeInfo method is:
+2060:%      NodeInfo *GetNodeInfo(CubeInfo *cube_info,const size_t id,
+2061:%        const size_t level,NodeInfo *parent)
+2065:%    o node: The GetNodeInfo method returns a pointer to a queue of nodes.
+2067:%    o id: Specifies the child number of the node.
+2072:static NodeInfo *GetNodeInfo(CubeInfo *cube_info,const size_t id,
+2073:  const size_t level,NodeInfo *parent)
+2075:  NodeInfo
+2088:        return((NodeInfo *) NULL);
+2089:      nodes->nodes=(NodeInfo *) AcquireQuantumMemory(NodesInAList,
+2091:      if (nodes->nodes == (NodeInfo *) NULL)
+2092:        return((NodeInfo *) NULL);
+2121:%  The error is computed by summing over all pixels in an image the distance
+2129:%      quantization error for any single pixel in the image.  This distance
+2135:%      distance measure is normalized to a range between 0 and 1.  It is
+2162:    distance,
+2209:      distance=fabs((double) (alpha*(MagickRealType) GetPixelRed(p)-beta*
+2211:      mean_error_per_pixel+=distance;
+2212:      mean_error+=distance*distance;
+2213:      if (distance > maximum_error)
+2214:        maximum_error=distance;
+2215:      distance=fabs((double) (alpha*(MagickRealType) GetPixelGreen(p)-beta*
+2217:      mean_error_per_pixel+=distance;
+2218:      mean_error+=distance*distance;
+2219:      if (distance > maximum_error)
+2220:        maximum_error=distance;
+2221:      distance=fabs((double) (alpha*(MagickRealType) GetPixelBlue(p)-beta*
+2223:      mean_error_per_pixel+=distance;
+2224:      mean_error+=distance*distance;
+2225:      if (distance > maximum_error)
+2226:        maximum_error=distance;
+2472:%      PruneChild(CubeInfo *cube_info,const NodeInfo *node_info)
+2481:static void PruneChild(CubeInfo *cube_info,const NodeInfo *node_info)
+2483:  NodeInfo
+2487:    number_children;
+2493:    Traverse any children.
+2495:  number_children=cube_info->associate_alpha == MagickFalse ? 8UL : 16UL;
+2496:  for (i=0; i < (ssize_t) number_children; i++)
+2497:    if (node_info->child[i] != (NodeInfo *) NULL)
+2498:      PruneChild(cube_info,node_info->child[i]);
+2510:      parent->child[node_info->id]=(NodeInfo *) NULL;
+2531:%      PruneLevel(CubeInfo *cube_info,const NodeInfo *node_info)
+2540:static void PruneLevel(CubeInfo *cube_info,const NodeInfo *node_info)
+2543:    number_children;
+2549:    Traverse any children.
+2551:  number_children=cube_info->associate_alpha == MagickFalse ? 8UL : 16UL;
+2552:  for (i=0; i < (ssize_t) number_children; i++)
+2553:    if (node_info->child[i] != (NodeInfo *) NULL)
+2554:      PruneLevel(cube_info,node_info->child[i]);
+2576:%      PruneToCubeDepth(CubeInfo *cube_info,const NodeInfo *node_info)
+2585:static void PruneToCubeDepth(CubeInfo *cube_info,const NodeInfo *node_info)
+2588:    number_children;
+2594:    Traverse any children.
+2596:  number_children=cube_info->associate_alpha == MagickFalse ? 8UL : 16UL;
+2597:  for (i=0; i < (ssize_t) number_children; i++)
+2598:    if (node_info->child[i] != (NodeInfo *) NULL)
+2599:      PruneToCubeDepth(cube_info,node_info->child[i]);
+2635:  CubeInfo
+2683:  cube_info=GetCubeInfo(quantize_info,depth,maximum_colors);
+2684:  if (cube_info == (CubeInfo *) NULL)
+2697:  DestroyCubeInfo(cube_info);
+2732:  CubeInfo
+2791:  cube_info=GetCubeInfo(quantize_info,depth,maximum_colors);
+2792:  if (cube_info == (CubeInfo *) NULL)
+2837:  DestroyCubeInfo(cube_info);
+2859:%      size_t QuantizeErrorFlatten(const CubeInfo *cube_info,
+2860:%        const NodeInfo *node_info,const ssize_t offset,
+2874:static size_t QuantizeErrorFlatten(const CubeInfo *cube_info,
+2875:  const NodeInfo *node_info,const ssize_t offset,
+2880:    number_children;
+2889:  number_children=cube_info->associate_alpha == MagickFalse ? 8UL : 16UL;
+2890:  for (i=0; i < (ssize_t) number_children ; i++)
+2891:    if (node_info->child[i] != (NodeInfo *) NULL)
+2892:      n+=QuantizeErrorFlatten(cube_info,node_info->child[i],offset+n,
+2913:%      Reduce(CubeInfo *cube_info,const NodeInfo *node_info)
+2922:static void Reduce(CubeInfo *cube_info,const NodeInfo *node_info)
+2925:    number_children;
+2931:    Traverse any children.
+2933:  number_children=cube_info->associate_alpha == MagickFalse ? 8UL : 16UL;
+2934:  for (i=0; i < (ssize_t) number_children; i++)
+2935:    if (node_info->child[i] != (NodeInfo *) NULL)
+2936:      Reduce(cube_info,node_info->child[i]);
+2996:%      ReduceImageColors(const Image *image,CubeInfo *cube_info)
+3021:static void ReduceImageColors(const Image *image,CubeInfo *cube_info)
+3103:  CubeInfo
+3118:  cube_info=GetCubeInfo(quantize_info,MaxTreeDepth,
+3120:  if (cube_info == (CubeInfo *) NULL)
+3133:  DestroyCubeInfo(cube_info);
+3168:  CubeInfo
+3193:  cube_info=GetCubeInfo(quantize_info,MaxTreeDepth,
+3195:  if (cube_info == (CubeInfo *) NULL)
+3213:  DestroyCubeInfo(cube_info);

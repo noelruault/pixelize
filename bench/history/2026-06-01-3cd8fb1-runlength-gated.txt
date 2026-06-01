@@ -1,0 +1,52 @@
+commit:      3cd8fb1  perf: add gated run-length short-circuit to the exact scan (report 10)
+commit-sha:  3cd8fb1c7ddcbd285f9464b2ea5ceb7259ff2fa6
+prior:       dc06a92 (kd large-P) / 1ec2d5b (flat-Pix16) -- baselines per regime
+date:        2026-06-01T11:59:51Z
+machine:     Linux x86_64, 4 cores
+cpu:         Intel(R) Xeon(R) Processor @ 2.10GHz
+go:          go1.25.0
+scope:       Phase 2 -- gated run-length short-circuit (report 10 winner)
+
+what/why
+--------
+Per-run (not per-pixel) match + span fill over horizontal runs of identical
+pixels, wrapping all three exact matchers. Gated on coherenceProbe >= 0.10.
+Exact/bit-identical; neutral when disabled.
+
+exactness (gate 1)
+------------------
+go test -run TestRunLengthMatchesSerial -race : PASS
+  coherent blocky images, P {16,128,256} (linear+kd) x {opaque,alpha}: 0
+  differing pixels / indices / usage vs serial reference. No data race.
+  Probe asserted >= 0.10 so the RL path is genuinely exercised.
+go test -run TestParallelMatchesSerial -race : PASS (unchanged)
+go test ./ (golden hashes) : PASS
+
+probe gating (decisive)
+-----------------------
+coherent (blocky 2K) probe = 0.938 -> RL ON
+noise (random 2K)    probe = 0.0000 -> RL OFF
+Wide dead zone; exact threshold uncritical.
+
+speed (in-process Go benchmark, 4 cores, 2K)
+--------------------------------------------
+content              path            time       vs RL-off
+coherent / P256      kd + RL         33.7 ms    ~9.9x (334 ms)
+coherent / P16       linear + RL     26.7 ms    ~5.4x (143 ms)
+noise / P256         kd  (RL off)    334 ms     unchanged (baseline)
+noise / P16          linear (RL off) 143 ms     unchanged (baseline)
+  Report 10 shows the win grows with size/P: flat 8K/P256 up to ~107x.
+
+efficiency gate (gate 4)
+------------------------
+PASS by a wide margin. Coherent: large time drop, same allocs/RAM, LESS total
+CPU work (skipped searches). Noise: probe disables RL, identical to baseline
+(no per-pixel overhead added to the disabled path). No resource increased.
+
+caveats
+-------
+- Win is content-dependent; neutral (not faster) on incoherent inputs by design.
+- Probe is O(samples), size-independent; cost negligible vs the scan.
+- Shared 4-vCPU container: absolute ms +-10-15%; ratios trustworthy.
+- regression gate vs prior: noise/photo paths unchanged; coherent strictly
+  faster; 0 exactness regressions. PASS.

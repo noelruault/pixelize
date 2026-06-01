@@ -1,0 +1,832 @@
+================================================================================
+11 — LUT Fast-mode variants: RAW DATA + FULL SOURCE
+================================================================================
+Machine: 4 logical CPUs, Go go1.24.7 linux/amd64 (binary), container (noisy).
+GOMAXPROCS=4. Work dir: /tmp/eval-lut/ (pixelize source NOT modified).
+Inputs: starry.jpg upscaled to 512x512 / 2048x2048 / 7680x4320 (P6 PPM, reused
+from /tmp/eval-scan), plus xorshift noise at 512/2048. Palettes: xorshift
+(seed P*7+1) at P in {16,64,256}.
+best-of-N: N=7 (<=512^2), 5 (<=2048^2), 3 (8K).
+
+LUT build = for each quantized cell run exact indexRaw on the cell-CENTER color
+(cell base + half-cell offset). Query = (r>>shift, g>>shift, b>>shift) index,
+row-band parallel. Exact bars: flat-Pix16 linear + bit-identical kd-tree
+(mirrors pixelize palette.go / kdtree.go), both row-band parallel.
+
+Accuracy "mismatch" = LUT-chosen color is GENUINELY FARTHER from the original
+pixel than the exact-chosen color (equidistant ties excluded -> not real error).
+meanErr/maxErr = RGB Euclidean distance between LUT color and exact color over
+the genuinely-wrong pixels.
+================================================================================
+
+----- ACCURACY (./lut acc) -----
+=== pixelize LUT Fast-mode evaluation ===
+Go go1.24.7, GOMAXPROCS=4
+
+### ACCURACY (Fast-mode cost) ###
+content,size,P,bits,mismatch_pct,meanErr,maxErr
+noise_512,512x512,16,5,3.7338,104.18,211
+noise_512,512x512,16,6,1.8974,105.38,203
+noise_512,512x512,16,7,1.1059,107.42,211
+noise_512,512x512,64,5,6.9008,69.11,157
+noise_512,512x512,64,6,3.5809,68.70,157
+noise_512,512x512,64,7,2.0435,68.47,157
+noise_512,512x512,256,5,11.8580,42.29,115
+noise_512,512x512,256,6,6.2649,42.25,115
+noise_512,512x512,256,7,3.4561,42.27,115
+noise_2048,2048x2048,16,5,3.6928,103.99,211
+noise_2048,2048x2048,16,6,1.9304,104.32,211
+noise_2048,2048x2048,16,7,1.1067,105.73,211
+noise_2048,2048x2048,64,5,6.8597,69.52,166
+noise_2048,2048x2048,64,6,3.5741,69.29,166
+noise_2048,2048x2048,64,7,2.0202,68.60,166
+noise_2048,2048x2048,256,5,11.7897,42.48,115
+noise_2048,2048x2048,256,6,6.1840,42.30,115
+noise_2048,2048x2048,256,7,3.4380,42.13,115
+starry_512,512x512,16,5,3.7148,101.71,182
+starry_512,512x512,16,6,1.8581,103.05,182
+starry_512,512x512,16,7,1.1322,103.48,182
+starry_512,512x512,64,5,7.5935,60.60,153
+starry_512,512x512,64,6,4.2683,60.63,153
+starry_512,512x512,64,7,2.3327,60.75,153
+starry_512,512x512,256,5,10.5499,43.59,84
+starry_512,512x512,256,6,5.7652,42.13,84
+starry_512,512x512,256,7,3.3436,41.96,83
+starry_2048,2048x2048,16,5,3.6602,101.68,182
+starry_2048,2048x2048,16,6,1.8867,102.62,182
+starry_2048,2048x2048,16,7,1.1634,103.59,182
+starry_2048,2048x2048,64,5,7.6452,60.35,153
+starry_2048,2048x2048,64,6,4.3431,60.13,153
+starry_2048,2048x2048,64,7,2.3482,60.39,153
+starry_2048,2048x2048,256,5,10.5915,43.62,90
+starry_2048,2048x2048,256,6,5.7752,42.15,84
+starry_2048,2048x2048,256,7,3.3369,41.96,84
+
+
+----- SPEED (./lut speed) -----
+=== pixelize LUT Fast-mode evaluation ===
+Go go1.24.7, GOMAXPROCS=4
+
+### SPEED (best-of-N) ###
+size,P,method,build_ms,query_ms,total_ms
+512,16,linear,0.000,5.73,5.73
+512,16,kd,0.004,5.48,5.48
+512,16,lut5_serialbuild,2.262,0.36,2.63
+512,16,lut5_parbuild,0.869,0.36,1.23
+512,16,lut6_serialbuild,18.757,0.28,19.04
+512,16,lut6_parbuild,4.986,0.28,5.27
+512,16,lut7_serialbuild,147.493,0.32,147.81
+512,16,lut7_parbuild,37.026,0.32,37.34
+512,64,linear,0.000,17.48,17.48
+512,64,kd,0.020,8.30,8.32
+512,64,lut5_serialbuild,8.675,0.28,8.95
+512,64,lut5_parbuild,2.367,0.28,2.64
+512,64,lut6_serialbuild,68.794,0.30,69.10
+512,64,lut6_parbuild,19.543,0.30,19.85
+512,64,lut7_serialbuild,544.231,0.46,544.69
+512,64,lut7_parbuild,209.774,0.46,210.23
+512,256,linear,0.000,111.45,111.45
+512,256,kd,0.141,16.62,16.76
+512,256,lut5_serialbuild,34.491,0.43,34.92
+512,256,lut5_parbuild,13.392,0.43,13.82
+512,256,lut6_serialbuild,273.866,0.44,274.31
+512,256,lut6_parbuild,102.996,0.44,103.44
+512,256,lut7_serialbuild,2193.652,0.46,2194.11
+512,256,lut7_parbuild,686.174,0.46,686.64
+2048,16,linear,0.000,116.16,116.16
+2048,16,kd,0.002,92.23,92.23
+2048,16,lut5_serialbuild,2.247,6.78,9.02
+2048,16,lut5_parbuild,1.218,6.78,7.99
+2048,16,lut6_serialbuild,18.903,6.61,25.51
+2048,16,lut6_parbuild,9.098,6.61,15.71
+2048,16,lut7_serialbuild,144.953,7.45,152.41
+2048,16,lut7_parbuild,52.515,7.45,59.97
+2048,64,linear,0.000,432.78,432.78
+2048,64,kd,0.019,158.40,158.42
+2048,64,lut5_serialbuild,8.766,6.82,15.58
+2048,64,lut5_parbuild,4.398,6.82,11.21
+2048,64,lut6_serialbuild,69.123,7.11,76.23
+2048,64,lut6_parbuild,27.280,7.11,34.39
+2048,64,lut7_serialbuild,556.217,6.56,562.77
+2048,64,lut7_parbuild,194.732,6.56,201.29
+2048,256,linear,0.000,1454.24,1454.24
+2048,256,kd,0.132,231.91,232.04
+2048,256,lut5_serialbuild,34.412,6.95,41.36
+2048,256,lut5_parbuild,13.491,6.95,20.44
+2048,256,lut6_serialbuild,278.382,8.02,286.40
+2048,256,lut6_parbuild,109.795,8.02,117.82
+2048,256,lut7_serialbuild,2163.030,7.33,2170.36
+2048,256,lut7_parbuild,749.030,7.33,756.36
+8k,16,linear,0.000,834.21,834.21
+8k,16,kd,0.003,692.19,692.19
+8k,16,lut5_serialbuild,2.850,41.85,44.70
+8k,16,lut5_parbuild,1.808,41.85,43.65
+8k,16,lut6_serialbuild,18.131,43.97,62.10
+8k,16,lut6_parbuild,7.671,43.97,51.64
+8k,16,lut7_serialbuild,147.461,48.13,195.59
+8k,16,lut7_parbuild,55.367,48.13,103.49
+8k,64,linear,0.000,3124.70,3124.70
+8k,64,kd,0.019,910.87,910.89
+8k,64,lut5_serialbuild,8.940,28.48,37.42
+8k,64,lut5_parbuild,2.375,28.48,30.85
+8k,64,lut6_serialbuild,69.816,42.60,112.41
+8k,64,lut6_parbuild,18.534,42.60,61.13
+8k,64,lut7_serialbuild,553.636,57.15,610.79
+8k,64,lut7_parbuild,285.256,57.15,342.41
+8k,256,linear,0.000,16095.58,16095.58
+8k,256,kd,0.149,2276.89,2277.04
+8k,256,lut5_serialbuild,35.195,56.96,92.16
+8k,256,lut5_parbuild,21.082,56.96,78.05
+8k,256,lut6_serialbuild,273.017,57.88,330.90
+8k,256,lut6_parbuild,133.338,57.88,191.22
+8k,256,lut7_serialbuild,2221.145,58.28,2279.42
+8k,256,lut7_parbuild,1068.989,58.28,1127.27
+
+
+----- TABLE RAM + 8K OOM CHECK (./lut ramcheck) -----
+### TABLE RAM + 8K OOM CHECK ###
+bits=5 entries=32768 tableRAM=0.12 MiB
+bits=6 entries=262144 tableRAM=1.00 MiB
+bits=7 entries=2097152 tableRAM=8.00 MiB
+8K src Pix (RGBA) = 126.6 MiB, out []int32 = 126.6 MiB
+8K 7-bit LUT P256 end-to-end: VmHWM=368932 KiB (360 MiB), HeapAlloc=0 MiB, Sys=367 MiB
+
+================================================================================
+FULL GO SOURCE (/tmp/eval-lut/main.go)
+================================================================================
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"math"
+	"os"
+	"runtime"
+	"sort"
+	"sync"
+	"time"
+)
+
+// ---------- palette / exact oracle (mirrors pixelize palette.go) ----------
+
+type pal16 struct{ r, g, b, a uint32 }
+type rgb struct{ r, g, b uint8 }
+
+func sqDiff(x, y uint32) uint32 {
+	var d uint32
+	if x > y {
+		d = x - y
+	} else {
+		d = y - x
+	}
+	return (d * d) >> 2
+}
+
+func buildTab(pal []rgb) []pal16 {
+	tab := make([]pal16, len(pal))
+	for i, c := range pal {
+		r := uint32(c.r)
+		r |= r << 8
+		g := uint32(c.g)
+		g |= g << 8
+		b := uint32(c.b)
+		b |= b << 8
+		tab[i] = pal16{r, g, b, 255 | 255<<8}
+	}
+	return tab
+}
+
+// indexRaw: bit-identical to color.Palette.Index for opaque src/palette.
+func indexRaw(pr, pg, pb, pa uint8, tab []pal16) int {
+	cr := uint32(pr)
+	cr |= cr << 8
+	cg := uint32(pg)
+	cg |= cg << 8
+	cb := uint32(pb)
+	cb |= cb << 8
+	ca := uint32(pa)
+	ca |= ca << 8
+	ret := 0
+	bestSum := uint32(1<<32 - 1)
+	for i := range tab {
+		t := tab[i]
+		sum := sqDiff(cr, t.r) + sqDiff(cg, t.g) + sqDiff(cb, t.b) + sqDiff(ca, t.a)
+		if sum < bestSum {
+			if sum == 0 {
+				return i
+			}
+			ret, bestSum = i, sum
+		}
+	}
+	return ret
+}
+
+// ---------- kd-tree (mirrors pixelize kdtree.go, bit-identical) ----------
+
+type kdNode struct {
+	r, g, b     uint8
+	idx, axis   int
+	left, right *kdNode
+}
+type kdTree struct {
+	root  *kdNode
+	nodes []kdNode
+}
+type kdPt struct {
+	r, g, b uint8
+	idx     int
+}
+
+func kdAxisVal(p kdPt, axis int) int32 {
+	switch axis {
+	case 0:
+		return int32(p.r)
+	case 1:
+		return int32(p.g)
+	default:
+		return int32(p.b)
+	}
+}
+func buildKDTree(pal []rgb) *kdTree {
+	pts := make([]kdPt, len(pal))
+	for i, e := range pal {
+		pts[i] = kdPt{e.r, e.g, e.b, i}
+	}
+	t := &kdTree{nodes: make([]kdNode, 0, len(pal))}
+	var build func(items []kdPt, depth int) *kdNode
+	build = func(items []kdPt, depth int) *kdNode {
+		if len(items) == 0 {
+			return nil
+		}
+		axis := depth % 3
+		sort.Slice(items, func(a, b int) bool {
+			va, vb := kdAxisVal(items[a], axis), kdAxisVal(items[b], axis)
+			if va != vb {
+				return va < vb
+			}
+			return items[a].idx < items[b].idx
+		})
+		mid := len(items) / 2
+		it := items[mid]
+		t.nodes = append(t.nodes, kdNode{r: it.r, g: it.g, b: it.b, idx: it.idx, axis: axis})
+		n := &t.nodes[len(t.nodes)-1]
+		n.left = build(items[:mid], depth+1)
+		n.right = build(items[mid+1:], depth+1)
+		return n
+	}
+	t.root = build(pts, 0)
+	return t
+}
+
+type kdSearch struct {
+	tr, tg, tb int32
+	bestD      int32
+	bestIdx    int
+}
+
+func (s *kdSearch) search(n *kdNode) {
+	if n == nil {
+		return
+	}
+	dr := s.tr - int32(n.r)
+	dg := s.tg - int32(n.g)
+	db := s.tb - int32(n.b)
+	d := dr*dr + dg*dg + db*db
+	if d < s.bestD || (d == s.bestD && n.idx < s.bestIdx) {
+		s.bestD = d
+		s.bestIdx = n.idx
+	}
+	var diff int32
+	switch n.axis {
+	case 0:
+		diff = dr
+	case 1:
+		diff = dg
+	default:
+		diff = db
+	}
+	var near, far *kdNode
+	if diff < 0 {
+		near, far = n.left, n.right
+	} else {
+		near, far = n.right, n.left
+	}
+	s.search(near)
+	if diff*diff <= s.bestD {
+		s.search(far)
+	}
+}
+func (t *kdTree) match(s *kdSearch, r, g, b uint8) int {
+	s.tr, s.tg, s.tb = int32(r), int32(g), int32(b)
+	s.bestD = 1 << 30
+	s.bestIdx = 1 << 30
+	s.search(t.root)
+	return s.bestIdx
+}
+
+// ---------- LUT ----------
+
+// buildLUTSerial builds a nearest-index table at `bits` per channel.
+// Cell center color used as the representative (matches report 07 / IM inverse-colormap).
+func buildLUTSerial(pal []rgb, bits int) []int32 {
+	tab := buildTab(pal)
+	n := 1 << bits      // cells per channel
+	shift := 8 - bits   // r>>shift gives the cell
+	half := uint8(0)
+	if shift > 0 {
+		half = uint8(1 << (shift - 1)) // cell center offset
+	}
+	total := n * n * n
+	lut := make([]int32, total)
+	for ri := 0; ri < n; ri++ {
+		rc := uint8(ri<<shift) + half
+		for gi := 0; gi < n; gi++ {
+			gc := uint8(gi<<shift) + half
+			base := (ri*n + gi) * n
+			for bi := 0; bi < n; bi++ {
+				bc := uint8(bi<<shift) + half
+				lut[base+bi] = int32(indexRaw(rc, gc, bc, 255, tab))
+			}
+		}
+	}
+	return lut
+}
+
+// buildLUTParallel: parallelize across the outer (r) cell index.
+func buildLUTParallel(pal []rgb, bits int) []int32 {
+	tab := buildTab(pal)
+	n := 1 << bits
+	shift := 8 - bits
+	half := uint8(0)
+	if shift > 0 {
+		half = uint8(1 << (shift - 1))
+	}
+	total := n * n * n
+	lut := make([]int32, total)
+	workers := runtime.GOMAXPROCS(0)
+	var wg sync.WaitGroup
+	band := (n + workers - 1) / workers
+	for w := 0; w < workers; w++ {
+		r0 := w * band
+		r1 := r0 + band
+		if r1 > n {
+			r1 = n
+		}
+		if r0 >= r1 {
+			continue
+		}
+		wg.Add(1)
+		go func(r0, r1 int) {
+			defer wg.Done()
+			for ri := r0; ri < r1; ri++ {
+				rc := uint8(ri<<shift) + half
+				for gi := 0; gi < n; gi++ {
+					gc := uint8(gi<<shift) + half
+					base := (ri*n + gi) * n
+					for bi := 0; bi < n; bi++ {
+						bc := uint8(bi<<shift) + half
+						lut[base+bi] = int32(indexRaw(rc, gc, bc, 255, tab))
+					}
+				}
+			}
+		}(r0, r1)
+	}
+	wg.Wait()
+	return lut
+}
+
+// queryLUT: row-band parallel; one table lookup per pixel.
+func queryLUT(pix []byte, w, h int, lut []int32, bits int, out []int32) {
+	shift := 8 - bits
+	mask := (1 << bits) - 1
+	nn := 1 << bits
+	workers := runtime.GOMAXPROCS(0)
+	var wg sync.WaitGroup
+	band := (h + workers - 1) / workers
+	for wk := 0; wk < workers; wk++ {
+		y0 := wk * band
+		y1 := y0 + band
+		if y1 > h {
+			y1 = h
+		}
+		if y0 >= y1 {
+			continue
+		}
+		wg.Add(1)
+		go func(y0, y1 int) {
+			defer wg.Done()
+			for y := y0; y < y1; y++ {
+				row := y * w * 4
+				for x := 0; x < w; x++ {
+					o := row + x*4
+					ri := (int(pix[o]) >> shift) & mask
+					gi := (int(pix[o+1]) >> shift) & mask
+					bi := (int(pix[o+2]) >> shift) & mask
+					out[y*w+x] = lut[(ri*nn+gi)*nn+bi]
+				}
+			}
+		}(y0, y1)
+	}
+	wg.Wait()
+}
+
+// queryLinear: exact flat-Pix16, row-band parallel.
+func queryLinear(pix []byte, w, h int, tab []pal16, out []int32) {
+	workers := runtime.GOMAXPROCS(0)
+	var wg sync.WaitGroup
+	band := (h + workers - 1) / workers
+	for wk := 0; wk < workers; wk++ {
+		y0 := wk * band
+		y1 := y0 + band
+		if y1 > h {
+			y1 = h
+		}
+		if y0 >= y1 {
+			continue
+		}
+		wg.Add(1)
+		go func(y0, y1 int) {
+			defer wg.Done()
+			for y := y0; y < y1; y++ {
+				row := y * w * 4
+				for x := 0; x < w; x++ {
+					o := row + x*4
+					out[y*w+x] = int32(indexRaw(pix[o], pix[o+1], pix[o+2], pix[o+3], tab))
+				}
+			}
+		}(y0, y1)
+	}
+	wg.Wait()
+}
+
+// queryKD: exact kd-tree, row-band parallel, per-worker search scratch.
+func queryKD(pix []byte, w, h int, t *kdTree, out []int32) {
+	workers := runtime.GOMAXPROCS(0)
+	var wg sync.WaitGroup
+	band := (h + workers - 1) / workers
+	for wk := 0; wk < workers; wk++ {
+		y0 := wk * band
+		y1 := y0 + band
+		if y1 > h {
+			y1 = h
+		}
+		if y0 >= y1 {
+			continue
+		}
+		wg.Add(1)
+		go func(y0, y1 int) {
+			defer wg.Done()
+			var s kdSearch
+			for y := y0; y < y1; y++ {
+				row := y * w * 4
+				for x := 0; x < w; x++ {
+					o := row + x*4
+					out[y*w+x] = int32(t.match(&s, pix[o], pix[o+1], pix[o+2]))
+				}
+			}
+		}(y0, y1)
+	}
+	wg.Wait()
+}
+
+// ---------- image loading / generation ----------
+
+type img struct {
+	pix  []byte // RGBA, 4 bytes/pixel
+	w, h int
+}
+
+func loadPPM(path string) (*img, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	r := bufio.NewReaderSize(f, 1<<20)
+	var magic string
+	var w, h, maxv int
+	if _, err := fmt.Fscan(r, &magic, &w, &h, &maxv); err != nil {
+		return nil, err
+	}
+	if magic != "P6" || maxv != 255 {
+		return nil, fmt.Errorf("unsupported ppm %s maxv=%d", magic, maxv)
+	}
+	// single whitespace after maxv
+	r.ReadByte()
+	raw := make([]byte, w*h*3)
+	if _, err := readFull(r, raw); err != nil {
+		return nil, err
+	}
+	pix := make([]byte, w*h*4)
+	for i := 0; i < w*h; i++ {
+		pix[i*4] = raw[i*3]
+		pix[i*4+1] = raw[i*3+1]
+		pix[i*4+2] = raw[i*3+2]
+		pix[i*4+3] = 255
+	}
+	return &img{pix: pix, w: w, h: h}, nil
+}
+
+func readFull(r *bufio.Reader, buf []byte) (int, error) {
+	total := 0
+	for total < len(buf) {
+		n, err := r.Read(buf[total:])
+		total += n
+		if err != nil {
+			if total == len(buf) {
+				return total, nil
+			}
+			return total, err
+		}
+	}
+	return total, nil
+}
+
+// xorshift RNG (report 04 style) for reproducible noise + palettes.
+type xs struct{ s uint64 }
+
+func (x *xs) next() uint64 {
+	x.s ^= x.s << 13
+	x.s ^= x.s >> 7
+	x.s ^= x.s << 17
+	return x.s
+}
+func (x *xs) byte() uint8 { return uint8(x.next() >> 24) }
+
+func genNoise(w, h int, seed uint64) *img {
+	x := &xs{s: seed | 1}
+	pix := make([]byte, w*h*4)
+	for i := 0; i < w*h; i++ {
+		pix[i*4] = x.byte()
+		pix[i*4+1] = x.byte()
+		pix[i*4+2] = x.byte()
+		pix[i*4+3] = 255
+	}
+	return &img{pix: pix, w: w, h: h}
+}
+
+func genPalette(p int, seed uint64) []rgb {
+	x := &xs{s: seed | 0x9E3779B97F4A7C15}
+	pal := make([]rgb, p)
+	for i := range pal {
+		pal[i] = rgb{x.byte(), x.byte(), x.byte()}
+	}
+	return pal
+}
+
+// ---------- timing ----------
+
+func bestOf(n int, f func()) float64 {
+	best := math.Inf(1)
+	for i := 0; i < n; i++ {
+		t0 := time.Now()
+		f()
+		ms := float64(time.Since(t0).Microseconds()) / 1000.0
+		if ms < best {
+			best = ms
+		}
+	}
+	return best
+}
+
+// ---------- accuracy ----------
+
+type acc struct {
+	mismatch    int
+	total       int
+	sumErr      float64 // sum of RGB euclidean error of wrong pixels
+	maxErr      float64
+}
+
+// compare LUT output to exact, measuring RGB-euclidean error between the
+// LUT-chosen palette color and the exact-chosen palette color.
+func accuracy(pix []byte, w, h int, lutOut, exactOut []int32, pal []rgb) acc {
+	a := acc{total: w * h}
+	for i := 0; i < w*h; i++ {
+		li := lutOut[i]
+		ei := exactOut[i]
+		if li == ei {
+			continue
+		}
+		// only count as mismatch if LUT color is genuinely farther from the
+		// ORIGINAL pixel than the exact color (a different equidistant tie is
+		// not a real error). Compute distance to original pixel.
+		o := i * 4
+		pr, pg, pb := int(pix[o]), int(pix[o+1]), int(pix[o+2])
+		lc := pal[li]
+		ec := pal[ei]
+		dl := sq(int(lc.r)-pr) + sq(int(lc.g)-pg) + sq(int(lc.b)-pb)
+		de := sq(int(ec.r)-pr) + sq(int(ec.g)-pg) + sq(int(ec.b)-pb)
+		if dl <= de {
+			continue // equidistant or LUT actually not worse -> not a real mismatch
+		}
+		a.mismatch++
+		// error = euclidean distance between LUT color and exact color
+		d := math.Sqrt(float64(sq(int(lc.r)-int(ec.r)) + sq(int(lc.g)-int(ec.g)) + sq(int(lc.b)-int(ec.b))))
+		a.sumErr += d
+		if d > a.maxErr {
+			a.maxErr = d
+		}
+	}
+	return a
+}
+func sq(x int) int { return x * x }
+
+func peakRSSKB() int64 {
+	data, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		return -1
+	}
+	for _, line := range splitLines(string(data)) {
+		if len(line) > 7 && line[:7] == "VmHWM:\t" {
+			var v int64
+			fmt.Sscanf(line[7:], "%d", &v)
+			return v
+		}
+	}
+	return -1
+}
+func splitLines(s string) []string {
+	var out []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			out = append(out, s[i+0-(i-start):i])
+			start = i + 1
+		}
+	}
+	return out
+}
+
+// ---------- main ----------
+
+type imgspec struct {
+	name string
+	w, h int
+	src  string // ppm path, or "" for noise
+}
+
+func main() {
+	runtime.GOMAXPROCS(4)
+	mode := "all"
+	if len(os.Args) > 1 {
+		mode = os.Args[1]
+	}
+
+	sizes := []imgspec{
+		{"512", 512, 512, "/tmp/eval-lut/starry_512x512.ppm"},
+		{"2048", 2048, 2048, "/tmp/eval-lut/starry_2048x2048.ppm"},
+		{"8k", 7680, 4320, "/tmp/eval-lut/starry_7680x4320.ppm"},
+	}
+	Ps := []int{16, 64, 256}
+	bitsList := []int{5, 6, 7}
+
+	if mode == "ramcheck" {
+		ramCheck()
+		return
+	}
+
+	// N for best-of
+	nFor := func(w, h int) int {
+		px := w * h
+		switch {
+		case px <= 512*512:
+			return 7
+		case px <= 2048*2048:
+			return 5
+		default:
+			return 3
+		}
+	}
+
+	fmt.Println("=== pixelize LUT Fast-mode evaluation ===")
+	fmt.Printf("Go %s, GOMAXPROCS=%d\n", runtime.Version(), runtime.GOMAXPROCS(0))
+	fmt.Println()
+
+	// ACCURACY pass (separate, on both noise + starry, all P, all bit depths)
+	if mode == "all" || mode == "acc" {
+		fmt.Println("### ACCURACY (Fast-mode cost) ###")
+		fmt.Println("content,size,P,bits,mismatch_pct,meanErr,maxErr")
+		accImgs := []struct {
+			content string
+			im      *img
+		}{}
+		// noise + starry at 512 and 2048 (8k accuracy assumed same content profile; measure 512/2048 for both, plus starry 8k)
+		nz512 := genNoise(512, 512, 12345)
+		nz2048 := genNoise(2048, 2048, 6789)
+		st512, _ := loadPPM(sizes[0].src)
+		st2048, _ := loadPPM(sizes[1].src)
+		accImgs = append(accImgs,
+			struct {
+				content string
+				im      *img
+			}{"noise_512", nz512},
+			struct {
+				content string
+				im      *img
+			}{"noise_2048", nz2048},
+			struct {
+				content string
+				im      *img
+			}{"starry_512", st512},
+			struct {
+				content string
+				im      *img
+			}{"starry_2048", st2048},
+		)
+		for _, ai := range accImgs {
+			im := ai.im
+			for _, P := range Ps {
+				pal := genPalette(P, uint64(P)*7+1)
+				tab := buildTab(pal)
+				exact := make([]int32, im.w*im.h)
+				queryLinear(im.pix, im.w, im.h, tab, exact)
+				for _, bits := range bitsList {
+					lut := buildLUTSerial(pal, bits)
+					lo := make([]int32, im.w*im.h)
+					queryLUT(im.pix, im.w, im.h, lut, bits, lo)
+					a := accuracy(im.pix, im.w, im.h, lo, exact, pal)
+					mean := 0.0
+					if a.mismatch > 0 {
+						mean = a.sumErr / float64(a.mismatch)
+					}
+					fmt.Printf("%s,%dx%d,%d,%d,%.4f,%.2f,%.0f\n",
+						ai.content, im.w, im.h, P, bits,
+						100*float64(a.mismatch)/float64(a.total), mean, a.maxErr)
+				}
+			}
+		}
+		fmt.Println()
+	}
+
+	// SPEED pass: build_ms, query_ms, total for each LUT depth + exact bars.
+	if mode == "all" || mode == "speed" {
+		fmt.Println("### SPEED (best-of-N) ###")
+		fmt.Println("size,P,method,build_ms,query_ms,total_ms")
+		for _, sp := range sizes {
+			im, err := loadPPM(sp.src)
+			if err != nil {
+				fmt.Printf("# load err %s: %v\n", sp.src, err)
+				continue
+			}
+			N := nFor(im.w, im.h)
+			out := make([]int32, im.w*im.h)
+			for _, P := range Ps {
+				pal := genPalette(P, uint64(P)*7+1)
+				tab := buildTab(pal)
+				kt := buildKDTree(pal)
+
+				// exact linear (no build cost beyond tab, negligible)
+				ql := bestOf(N, func() { queryLinear(im.pix, im.w, im.h, tab, out) })
+				fmt.Printf("%s,%d,linear,%.3f,%.2f,%.2f\n", sp.name, P, 0.0, ql, ql)
+
+				// exact kd
+				bkd := bestOf(N, func() { _ = buildKDTree(pal) })
+				_ = kt
+				qkd := bestOf(N, func() { queryKD(im.pix, im.w, im.h, kt, out) })
+				fmt.Printf("%s,%d,kd,%.3f,%.2f,%.2f\n", sp.name, P, bkd, qkd, bkd+qkd)
+
+				// LUT depths
+				for _, bits := range bitsList {
+					bb := bestOf(N, func() { _ = buildLUTSerial(pal, bits) })
+					bbp := bestOf(N, func() { _ = buildLUTParallel(pal, bits) })
+					lut := buildLUTParallel(pal, bits)
+					qq := bestOf(N, func() { queryLUT(im.pix, im.w, im.h, lut, bits, out) })
+					// report the parallel build (better) as the build cost
+					fmt.Printf("%s,%d,lut%d_serialbuild,%.3f,%.2f,%.2f\n", sp.name, P, bits, bb, qq, bb+qq)
+					fmt.Printf("%s,%d,lut%d_parbuild,%.3f,%.2f,%.2f\n", sp.name, P, bits, bbp, qq, bbp+qq)
+				}
+			}
+		}
+		fmt.Println()
+	}
+}
+
+func ramCheck() {
+	// per-table RAM = entries * 4 bytes (int32)
+	fmt.Println("### TABLE RAM + 8K OOM CHECK ###")
+	for _, bits := range []int{5, 6, 7} {
+		entries := 1 << (3 * bits)
+		fmt.Printf("bits=%d entries=%d tableRAM=%.2f MiB\n", bits, entries, float64(entries*4)/(1<<20))
+	}
+	// 8k buffers
+	px := 7680 * 4320
+	fmt.Printf("8K src Pix (RGBA) = %.1f MiB, out []int32 = %.1f MiB\n",
+		float64(px*4)/(1<<20), float64(px*4)/(1<<20))
+	// build a 7-bit LUT + run an 8K query end to end, report VmHWM
+	pal := genPalette(256, 99)
+	lut := buildLUTParallel(pal, 7)
+	im, err := loadPPM("/tmp/eval-lut/starry_7680x4320.ppm")
+	if err != nil {
+		fmt.Println("# 8k load err:", err)
+		return
+	}
+	out := make([]int32, im.w*im.h)
+	queryLUT(im.pix, im.w, im.h, lut, 7, out)
+	runtime.GC()
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	fmt.Printf("8K 7-bit LUT P256 end-to-end: VmHWM=%d KiB (%.0f MiB), HeapAlloc=%.0f MiB, Sys=%.0f MiB\n",
+		peakRSSKB(), float64(peakRSSKB())/1024, float64(m.HeapAlloc)/(1<<20), float64(m.Sys)/(1<<20))
+	_ = out
+}

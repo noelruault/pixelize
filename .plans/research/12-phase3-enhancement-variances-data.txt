@@ -1,0 +1,615 @@
+########################################################################
+# 12-phase3-enhancement-variances-data.txt — RAW DATA + FULL GO SOURCE
+# Closes the open Phase-3 §4.2 enhancement variances with measurements:
+#   Hamerly + previous-pixel coherence pruning, Morton/Z-order LUT layout,
+#   SoA layout, and SIMD/AVX2 readiness. Plus the bit-identical alpha-drop
+#   finding that fell out of the SoA probe and WAS shipped.
+#
+# Generated on go1.25.0 linux/amd64, nproc=4, GOMAXPROCS=4, shared container
+# (NOISY: absolute ms swing run-to-run; this run carried -benchmem overhead and
+# reads ~30-40% higher than a quiet run. Conclusions rest on RATIOS within one
+# run, which are stable; see report 12 for the analysis).
+#
+# Image: docs/demo/inputs/starry.jpg (Van Gogh), opaque, ~207k px.
+# Palettes: gameboy P4, pico8 P16, nes P64, lego P188 (all embedded).
+#
+# Variants measured (all standalone in this throwaway in-package test file,
+# deleted after measurement so rejected code never ships):
+#   AoS4ch     = shipped flat-Pix16 linear scan via indexRaw (4 channels) = BAR
+#   Pal16_3ch  = indexRaw minus the alpha term, 16-bit promote + >>2 floor
+#                kept (BIT-IDENTICAL to stdlib for opaque) -> SHIPPED
+#   AoS3ch     = naive 8-bit int32, NO >>2 floor (NOT bit-identical; only
+#                happens to match on this image) -> shown for contrast
+#   SoA3ch     = AoS3ch but palette channels in separate slices (layout test)
+#   Hamerly    = SoA + s(c) bound + previous-pixel coherence shortcut (exact)
+#   LUTRowMajor / LUTMorton = 6-bit Fast LUT, row-major vs Z-order layout
+#   KD         = shipped kd-tree (large-P reference)
+#   Null       = read 4 bytes, write 0 (memory floor)
+########################################################################
+
+================= RAW: EXACTNESS GATE =================
+    zz_variance_bench_test.go:339: nes P=64 (real img): SoA-8bit miss=0  Hamerly miss=0  pal16_3ch miss=0  coherence-hit=0.054
+    zz_variance_bench_test.go:339: lego P=188 (real img): SoA-8bit miss=0  Hamerly miss=0  pal16_3ch miss=0  coherence-hit=0.136
+--- PASS: TestVarianceExactness (1.29s)
+PASS
+
+================= RAW: BENCHMARKS (best-of-6, 300ms) =================
+BenchmarkVar/Null-4         	    2718	    133133 ns/op	         0.6420 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/Null-4         	    2688	    138683 ns/op	         0.6688 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/Null-4         	    2704	    134041 ns/op	         0.6464 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/Null-4         	    2731	    131699 ns/op	         0.6351 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/Null-4         	    2727	    132815 ns/op	         0.6405 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/Null-4         	    2702	    130450 ns/op	         0.6291 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/AoS4ch/P4-4    	      60	   5926290 ns/op	        28.58 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P4-4    	      60	   5990506 ns/op	        28.89 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P4-4    	      58	   6125553 ns/op	        29.54 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P4-4    	      57	   6681950 ns/op	        32.22 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P4-4    	      58	   5918871 ns/op	        28.54 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P4-4    	      60	   6018770 ns/op	        29.03 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P4-4    	     158	   2246259 ns/op	        10.83 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P4-4    	     159	   2613139 ns/op	        12.60 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P4-4    	     162	   2249578 ns/op	        10.85 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P4-4    	     160	   2287011 ns/op	        11.03 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P4-4    	     162	   2250373 ns/op	        10.85 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P4-4    	     158	   2539546 ns/op	        12.25 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/SoA3ch/P4-4    	     148	   2269675 ns/op	        10.95 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/SoA3ch/P4-4    	     159	   2290561 ns/op	        11.05 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/SoA3ch/P4-4    	     158	   2580109 ns/op	        12.44 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/SoA3ch/P4-4    	     153	   2423122 ns/op	        11.69 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/SoA3ch/P4-4    	     153	   2286552 ns/op	        11.03 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/SoA3ch/P4-4    	     148	   2275074 ns/op	        10.97 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/Pal16_3ch/P4-4 	      79	   4312194 ns/op	        20.80 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P4-4 	      84	   4324568 ns/op	        20.86 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P4-4 	      80	   4283919 ns/op	        20.66 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P4-4 	      84	   4354249 ns/op	        21.00 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P4-4 	      79	   4304677 ns/op	        20.76 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P4-4 	      84	   4277816 ns/op	        20.63 ns/px	      64 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P16-4   	      15	  20351056 ns/op	        98.14 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P16-4   	      16	  20301175 ns/op	        97.90 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P16-4   	      16	  20099195 ns/op	        96.93 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P16-4   	      16	  19972808 ns/op	        96.32 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P16-4   	      18	  20158960 ns/op	        97.22 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P16-4   	      18	  20073457 ns/op	        96.80 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P16-4   	      46	   7689825 ns/op	        37.08 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P16-4   	      45	   7626284 ns/op	        36.78 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P16-4   	      45	   7693805 ns/op	        37.10 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P16-4   	      46	   7658186 ns/op	        36.93 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P16-4   	      46	   7636663 ns/op	        36.83 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P16-4   	      44	   7591219 ns/op	        36.61 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/SoA3ch/P16-4   	      48	   7320280 ns/op	        35.30 ns/px	     192 B/op	       3 allocs/op
+BenchmarkVar/SoA3ch/P16-4   	      42	   7416062 ns/op	        35.76 ns/px	     192 B/op	       3 allocs/op
+BenchmarkVar/SoA3ch/P16-4   	      48	   7418411 ns/op	        35.78 ns/px	     192 B/op	       3 allocs/op
+BenchmarkVar/SoA3ch/P16-4   	      48	   7593323 ns/op	        36.62 ns/px	     192 B/op	       3 allocs/op
+BenchmarkVar/SoA3ch/P16-4   	      48	   7364244 ns/op	        35.51 ns/px	     192 B/op	       3 allocs/op
+BenchmarkVar/SoA3ch/P16-4   	      49	   7332926 ns/op	        35.36 ns/px	     192 B/op	       3 allocs/op
+BenchmarkVar/Pal16_3ch/P16-4         	      22	  15673892 ns/op	        75.59 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P16-4         	      22	  15380869 ns/op	        74.17 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P16-4         	      22	  15616205 ns/op	        75.31 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P16-4         	      20	  15674637 ns/op	        75.59 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P16-4         	      22	  16176207 ns/op	        78.01 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P16-4         	      22	  15561684 ns/op	        75.05 ns/px	     256 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P64-4            	       4	  75431616 ns/op	       363.8 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P64-4            	       4	  75493521 ns/op	       364.1 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P64-4            	       4	  75388641 ns/op	       363.6 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P64-4            	       5	  74273230 ns/op	       358.2 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P64-4            	       5	  74448017 ns/op	       359.0 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/AoS4ch/P64-4            	       5	  73996026 ns/op	       356.8 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P64-4            	      12	  29474465 ns/op	       142.1 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P64-4            	      12	  29226258 ns/op	       140.9 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P64-4            	      12	  29196848 ns/op	       140.8 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P64-4            	      12	  29334574 ns/op	       141.5 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P64-4            	      12	  29245803 ns/op	       141.0 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/AoS3ch/P64-4            	      12	  29104987 ns/op	       140.4 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/SoA3ch/P64-4            	      12	  28962809 ns/op	       139.7 ns/px	     768 B/op	       3 allocs/op
+BenchmarkVar/SoA3ch/P64-4            	      12	  31816763 ns/op	       153.4 ns/px	     768 B/op	       3 allocs/op
+BenchmarkVar/SoA3ch/P64-4            	      12	  27508038 ns/op	       132.7 ns/px	     768 B/op	       3 allocs/op
+BenchmarkVar/SoA3ch/P64-4            	      12	  28366617 ns/op	       136.8 ns/px	     768 B/op	       3 allocs/op
+BenchmarkVar/SoA3ch/P64-4            	      12	  27700308 ns/op	       133.6 ns/px	     768 B/op	       3 allocs/op
+BenchmarkVar/SoA3ch/P64-4            	      12	  32589165 ns/op	       157.2 ns/px	     768 B/op	       3 allocs/op
+BenchmarkVar/Pal16_3ch/P64-4         	       6	  58196194 ns/op	       280.7 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P64-4         	       6	  61580977 ns/op	       297.0 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P64-4         	       6	  59227041 ns/op	       285.6 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P64-4         	       6	  59439990 ns/op	       286.7 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P64-4         	       6	  58273030 ns/op	       281.0 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/Pal16_3ch/P64-4         	       6	  60782201 ns/op	       293.1 ns/px	    1024 B/op	       1 allocs/op
+BenchmarkVar/Hamerly/P64-4           	      10	  33551259 ns/op	       161.8 ns/px	    1024 B/op	       4 allocs/op
+BenchmarkVar/Hamerly/P64-4           	      10	  31695208 ns/op	       152.9 ns/px	    1024 B/op	       4 allocs/op
+BenchmarkVar/Hamerly/P64-4           	      10	  31214090 ns/op	       150.5 ns/px	    1024 B/op	       4 allocs/op
+BenchmarkVar/Hamerly/P64-4           	      10	  31145347 ns/op	       150.2 ns/px	    1024 B/op	       4 allocs/op
+BenchmarkVar/Hamerly/P64-4           	      10	  33621318 ns/op	       162.1 ns/px	    1024 B/op	       4 allocs/op
+BenchmarkVar/Hamerly/P64-4           	      10	  32498127 ns/op	       156.7 ns/px	    1024 B/op	       4 allocs/op
+BenchmarkVar/LinearAoS/P188-4        	       2	 230435428 ns/op	      1111 ns/px	    3072 B/op	       1 allocs/op
+BenchmarkVar/LinearAoS/P188-4        	       2	 216185178 ns/op	      1043 ns/px	    3072 B/op	       1 allocs/op
+BenchmarkVar/LinearAoS/P188-4        	       2	 212881251 ns/op	      1027 ns/px	    3072 B/op	       1 allocs/op
+BenchmarkVar/LinearAoS/P188-4        	       2	 213021556 ns/op	      1027 ns/px	    3072 B/op	       1 allocs/op
+BenchmarkVar/LinearAoS/P188-4        	       2	 213499478 ns/op	      1030 ns/px	    3072 B/op	       1 allocs/op
+BenchmarkVar/LinearAoS/P188-4        	       2	 213456259 ns/op	      1029 ns/px	    3072 B/op	       1 allocs/op
+BenchmarkVar/LinearSoA/P188-4        	       4	  81179552 ns/op	       391.5 ns/px	    2304 B/op	       3 allocs/op
+BenchmarkVar/LinearSoA/P188-4        	       4	  81466374 ns/op	       392.9 ns/px	    2304 B/op	       3 allocs/op
+BenchmarkVar/LinearSoA/P188-4        	       4	  85000349 ns/op	       409.9 ns/px	    2304 B/op	       3 allocs/op
+BenchmarkVar/LinearSoA/P188-4        	       4	  80772295 ns/op	       389.5 ns/px	    2304 B/op	       3 allocs/op
+BenchmarkVar/LinearSoA/P188-4        	       4	  80786683 ns/op	       389.6 ns/px	    2304 B/op	       3 allocs/op
+BenchmarkVar/LinearSoA/P188-4        	       4	  81674040 ns/op	       393.9 ns/px	    2304 B/op	       3 allocs/op
+BenchmarkVar/Hamerly/P188-4          	       4	  79712588 ns/op	       384.4 ns/px	    3072 B/op	       4 allocs/op
+BenchmarkVar/Hamerly/P188-4          	       4	  79062252 ns/op	       381.3 ns/px	    3072 B/op	       4 allocs/op
+BenchmarkVar/Hamerly/P188-4          	       4	  80685047 ns/op	       389.1 ns/px	    3072 B/op	       4 allocs/op
+BenchmarkVar/Hamerly/P188-4          	       4	  83801168 ns/op	       404.1 ns/px	    3072 B/op	       4 allocs/op
+BenchmarkVar/Hamerly/P188-4          	       4	  86754506 ns/op	       418.4 ns/px	    3072 B/op	       4 allocs/op
+BenchmarkVar/Hamerly/P188-4          	       4	  79890677 ns/op	       385.3 ns/px	    3072 B/op	       4 allocs/op
+BenchmarkVar/KD/P188-4               	      10	  32839037 ns/op	       158.4 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/KD/P188-4               	      10	  33171485 ns/op	       160.0 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/KD/P188-4               	      10	  32281588 ns/op	       155.7 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/KD/P188-4               	      10	  32275436 ns/op	       155.6 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/KD/P188-4               	      10	  32265864 ns/op	       155.6 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/KD/P188-4               	      10	  32534142 ns/op	       156.9 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/LUTRowMajor-4           	     403	    884613 ns/op	         4.266 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/LUTRowMajor-4           	     412	    867407 ns/op	         4.183 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/LUTRowMajor-4           	     404	    883444 ns/op	         4.260 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/LUTRowMajor-4           	     354	    883753 ns/op	         4.262 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/LUTRowMajor-4           	     405	    897129 ns/op	         4.326 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/LUTRowMajor-4           	     381	    877676 ns/op	         4.233 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/LUTMorton-4             	     204	   1801182 ns/op	         8.686 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/LUTMorton-4             	     199	   1799210 ns/op	         8.677 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/LUTMorton-4             	     201	   1774533 ns/op	         8.558 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/LUTMorton-4             	     204	   1724961 ns/op	         8.319 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/LUTMorton-4             	     205	   1733254 ns/op	         8.359 ns/px	       0 B/op	       0 allocs/op
+BenchmarkVar/LUTMorton-4             	     177	   1740024 ns/op	         8.391 ns/px	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/noelruault/pixelize	58.329s
+
+================= DERIVED: best-of-6 ns/px summary =================
+BenchmarkVar/AoS3ch/P16-4      best=   36.61 worst=   37.10 ns/px
+BenchmarkVar/AoS3ch/P4-4       best=   10.83 worst=   12.60 ns/px
+BenchmarkVar/AoS3ch/P64-4      best=  140.40 worst=  142.10 ns/px
+BenchmarkVar/AoS4ch/P16-4      best=   96.32 worst=   98.14 ns/px
+BenchmarkVar/AoS4ch/P4-4       best=   28.54 worst=   32.22 ns/px
+BenchmarkVar/AoS4ch/P64-4      best=  356.80 worst=  364.10 ns/px
+BenchmarkVar/Hamerly/P188-4    best=  381.30 worst=  418.40 ns/px
+BenchmarkVar/Hamerly/P64-4     best=  150.20 worst=  162.10 ns/px
+BenchmarkVar/KD/P188-4         best=  155.60 worst=  160.00 ns/px
+BenchmarkVar/LUTMorton-4       best=    8.32 worst=    8.69 ns/px
+BenchmarkVar/LUTRowMajor-4     best=    4.18 worst=    4.33 ns/px
+BenchmarkVar/LinearAoS/P188-4  best= 1027.00 worst= 1111.00 ns/px
+BenchmarkVar/LinearSoA/P188-4  best=  389.50 worst=  409.90 ns/px
+BenchmarkVar/Null-4            best=    0.63 worst=    0.67 ns/px
+BenchmarkVar/Pal16_3ch/P16-4   best=   74.17 worst=   78.01 ns/px
+BenchmarkVar/Pal16_3ch/P4-4    best=   20.63 worst=   21.00 ns/px
+BenchmarkVar/Pal16_3ch/P64-4   best=  280.70 worst=  297.00 ns/px
+BenchmarkVar/SoA3ch/P16-4      best=   35.30 worst=   36.62 ns/px
+BenchmarkVar/SoA3ch/P4-4       best=   10.95 worst=   12.44 ns/px
+BenchmarkVar/SoA3ch/P64-4      best=  132.70 worst=  157.20 ns/px
+
+================= SHIPPED applyNearest before/after (alpha-drop) =================
+Parallel (4-core) pixelize.applyNearest on starry.jpg, best-of-6:
+  palette   P     before(4ch)  after(3ch)  speedup
+  gameboy   4     18.43        17.04       1.08x
+  pico8     16    37.63        31.07       1.21x
+  nes       64    108.40       83.92       1.29x
+  lego      188   59.41        60.22       ~1.00x (kd path, untouched)
+
+================= FULL GO SOURCE (throwaway test, since deleted) =================
+package pixelize
+
+// Ephemeral benchmark harness for the Phase-3 §4.2 enhancement variances
+// (Hamerly + prev-pixel coherence pruning, Morton/Z-order LUT layout, SoA +
+// SIMD-readiness). NOT committed: it measures the deciding numbers so the
+// variances can be formally closed in the research log, then it is deleted so
+// rejected code never ships. Run: go test -run xxx -bench Var -benchmem .
+
+import (
+	"image"
+	"image/jpeg"
+	"os"
+	"testing"
+
+	"github.com/noelruault/pixelize/palettes"
+)
+
+func benchPal(tb testing.TB, name string) Palette[EntryMeta] {
+	r, err := palettes.Resolve(name)
+	if err != nil {
+		tb.Fatalf("resolve %s: %v", name, err)
+	}
+	defer r.Reader.Close()
+	pal, err := LoadCSV(r.Reader)
+	if err != nil {
+		tb.Fatalf("load %s: %v", name, err)
+	}
+	return pal
+}
+
+func benchImage(tb testing.TB) *image.RGBA {
+	f, err := os.Open("docs/demo/inputs/starry.jpg")
+	if err != nil {
+		tb.Fatalf("open image: %v", err)
+	}
+	defer f.Close()
+	src, err := jpeg.Decode(f)
+	if err != nil {
+		tb.Fatalf("decode: %v", err)
+	}
+	b := src.Bounds()
+	img := image.NewRGBA(b)
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			img.Set(x, y, src.At(x, y))
+		}
+	}
+	return img
+}
+
+// ---- baseline: shipped flat-Pix16 AoS linear scan (per-pixel, no run-length) ----
+
+func scanLinearAoS[M any](p Palette[M], src *image.RGBA, out []int32) {
+	tab := make([]pal16, len(p))
+	for i, e := range p {
+		tab[i] = pal16FromRGBA(e.R, e.G, e.B, 255)
+	}
+	n := 0
+	for so := 0; so < len(src.Pix); so += 4 {
+		out[n] = int32(indexRaw(src.Pix[so], src.Pix[so+1], src.Pix[so+2], src.Pix[so+3], tab))
+		n++
+	}
+}
+
+// ---- AoS but inlined + 3-channel (opaque): isolates "drop alpha + inline"
+// from "SoA layout". Reads interleaved r,g,b,_ int32 (same cache footprint as
+// pal16 minus alpha use). ----
+func scanLinearAoS3[M any](p Palette[M], src *image.RGBA, out []int32) {
+	tab := make([]int32, len(p)*4) // r,g,b,_ interleaved
+	for i, e := range p {
+		tab[i*4], tab[i*4+1], tab[i*4+2] = int32(e.R), int32(e.G), int32(e.B)
+	}
+	n := 0
+	for so := 0; so < len(src.Pix); so += 4 {
+		pr, pg, pb := int32(src.Pix[so]), int32(src.Pix[so+1]), int32(src.Pix[so+2])
+		best, bestd := 0, int32(1<<30)
+		for i := 0; i < len(tab); i += 4 {
+			dr, dg, db := pr-tab[i], pg-tab[i+1], pb-tab[i+2]
+			d := dr*dr + dg*dg + db*db
+			if d < bestd {
+				bestd, best = d, i/4
+			}
+		}
+		out[n] = int32(best)
+		n++
+	}
+}
+
+// ---- production-shaped: inline a 3-channel scan over the EXISTING pal16 table
+// (uint32, no new allocation), dropping the alpha term. This is the exact form
+// the shipped opaque branch would take. ----
+func scanLinearPal16_3ch[M any](p Palette[M], src *image.RGBA, out []int32) {
+	tab := make([]pal16, len(p))
+	for i, e := range p {
+		tab[i] = pal16FromRGBA(e.R, e.G, e.B, 255)
+	}
+	n := 0
+	for so := 0; so < len(src.Pix); so += 4 {
+		// 8->16-bit promote, exactly like indexRaw, so the per-channel >>2
+		// floor in sqDiff matches stdlib bit-for-bit. Alpha term dropped:
+		// valid only when the source is opaque (then it is 0 for every entry).
+		cr := uint32(src.Pix[so])
+		cr |= cr << 8
+		cg := uint32(src.Pix[so+1])
+		cg |= cg << 8
+		cb := uint32(src.Pix[so+2])
+		cb |= cb << 8
+		best := 0
+		bestSum := uint32(1<<32 - 1)
+		for i := range tab {
+			t := &tab[i]
+			sum := sqDiff(cr, t.r) + sqDiff(cg, t.g) + sqDiff(cb, t.b)
+			if sum < bestSum {
+				if sum == 0 {
+					best = i
+					break
+				}
+				best, bestSum = i, sum
+			}
+		}
+		out[n] = int32(best)
+		n++
+	}
+}
+
+// ---- SoA linear scan: palette channels in separate slices ----
+
+func scanLinearSoA[M any](p Palette[M], src *image.RGBA, out []int32) {
+	rr := make([]int32, len(p))
+	gg := make([]int32, len(p))
+	bb := make([]int32, len(p))
+	for i, e := range p {
+		rr[i], gg[i], bb[i] = int32(e.R), int32(e.G), int32(e.B)
+	}
+	n := 0
+	for so := 0; so < len(src.Pix); so += 4 {
+		pr, pg, pb := int32(src.Pix[so]), int32(src.Pix[so+1]), int32(src.Pix[so+2])
+		best, bestd := 0, int32(1<<30)
+		for i := range rr {
+			dr, dg, db := pr-rr[i], pg-gg[i], pb-bb[i]
+			d := dr*dr + dg*dg + db*db
+			if d < bestd {
+				bestd, best = d, i
+			}
+		}
+		out[n] = int32(best)
+		n++
+	}
+}
+
+// ---- Hamerly + previous-pixel coherence pruning (exact, with tie-safe fallback) ----
+// Returns the fraction of pixels resolved by the coherence shortcut.
+func scanHamerly[M any](p Palette[M], src *image.RGBA, out []int32) float64 {
+	np := len(p)
+	rr := make([]int32, np)
+	gg := make([]int32, np)
+	bb := make([]int32, np)
+	for i, e := range p {
+		rr[i], gg[i], bb[i] = int32(e.R), int32(e.G), int32(e.B)
+	}
+	// s2[i] = 0.25 * min_{j!=i} d2(c_i, c_j): if d2(x,c_i) <= s2[i], c_i is
+	// provably nearest (triangle inequality). Strict-less keeps the shortcut
+	// off the tie boundary, so stdlib's lowest-index rule is preserved.
+	s2 := make([]int32, np)
+	for i := range rr {
+		m := int32(1 << 30)
+		for j := range rr {
+			if i == j {
+				continue
+			}
+			dr, dg, db := rr[i]-rr[j], gg[i]-gg[j], bb[i]-bb[j]
+			d := dr*dr + dg*dg + db*db
+			if d < m {
+				m = d
+			}
+		}
+		s2[i] = m / 4
+	}
+	full := func(pr, pg, pb int32) int {
+		best, bestd := 0, int32(1<<30)
+		for i := range rr {
+			dr, dg, db := pr-rr[i], pg-gg[i], pb-bb[i]
+			d := dr*dr + dg*dg + db*db
+			if d < bestd {
+				bestd, best = d, i
+			}
+		}
+		return best
+	}
+	prev := -1
+	hits := 0
+	n := 0
+	total := len(src.Pix) / 4
+	for so := 0; so < len(src.Pix); so += 4 {
+		pr, pg, pb := int32(src.Pix[so]), int32(src.Pix[so+1]), int32(src.Pix[so+2])
+		idx := -1
+		if prev >= 0 {
+			dr, dg, db := pr-rr[prev], pg-gg[prev], pb-bb[prev]
+			d := dr*dr + dg*dg + db*db
+			if d < s2[prev] { // strict: c_prev provably the unique-or-lowest nearest
+				idx = prev
+				hits++
+			}
+		}
+		if idx < 0 {
+			idx = full(pr, pg, pb)
+		}
+		out[n] = int32(idx)
+		prev = idx
+		n++
+	}
+	return float64(hits) / float64(total)
+}
+
+// ---- LUT: row-major (shipped) vs Morton/Z-order layout ----
+
+func part1By2(n uint32) uint32 { // spread 6 bits over every 3rd bit
+	n &= 0x3f
+	n = (n | (n << 8)) & 0x0300000f
+	n = (n | (n << 4)) & 0x030000c3
+	n = (n | (n << 2)) & 0x09249249
+	return n
+}
+func mortonIdx(r, g, b uint32) uint32 {
+	return part1By2(r) | (part1By2(g) << 1) | (part1By2(b) << 2)
+}
+
+func buildLUTRowMajor[M any](p Palette[M], bits int) []int32 {
+	tab := make([]pal16, len(p))
+	for i, e := range p {
+		tab[i] = pal16FromRGBA(e.R, e.G, e.B, 255)
+	}
+	n := 1 << bits
+	shift := 8 - bits
+	half := uint8(1 << (shift - 1))
+	t := make([]int32, n*n*n)
+	for ri := 0; ri < n; ri++ {
+		rc := uint8(ri<<shift) + half
+		for gi := 0; gi < n; gi++ {
+			gc := uint8(gi<<shift) + half
+			for bi := 0; bi < n; bi++ {
+				bc := uint8(bi<<shift) + half
+				t[(ri*n+gi)*n+bi] = int32(indexRaw(rc, gc, bc, 255, tab))
+			}
+		}
+	}
+	return t
+}
+
+func buildLUTMorton[M any](p Palette[M], bits int) []int32 {
+	tab := make([]pal16, len(p))
+	for i, e := range p {
+		tab[i] = pal16FromRGBA(e.R, e.G, e.B, 255)
+	}
+	n := 1 << bits
+	shift := 8 - bits
+	half := uint8(1 << (shift - 1))
+	t := make([]int32, n*n*n)
+	for ri := 0; ri < n; ri++ {
+		rc := uint8(ri<<shift) + half
+		for gi := 0; gi < n; gi++ {
+			gc := uint8(gi<<shift) + half
+			for bi := 0; bi < n; bi++ {
+				bc := uint8(bi<<shift) + half
+				t[mortonIdx(uint32(ri), uint32(gi), uint32(bi))] = int32(indexRaw(rc, gc, bc, 255, tab))
+			}
+		}
+	}
+	return t
+}
+
+func queryLUTRowMajor(t []int32, src *image.RGBA, bits int, out []int32) {
+	shift := 8 - bits
+	mask := (1 << bits) - 1
+	nn := 1 << bits
+	n := 0
+	for so := 0; so < len(src.Pix); so += 4 {
+		ri := (int(src.Pix[so]) >> shift) & mask
+		gi := (int(src.Pix[so+1]) >> shift) & mask
+		bi := (int(src.Pix[so+2]) >> shift) & mask
+		out[n] = t[(ri*nn+gi)*nn+bi]
+		n++
+	}
+}
+
+func queryLUTMorton(t []int32, src *image.RGBA, bits int, out []int32) {
+	shift := 8 - bits
+	mask := uint32((1 << bits) - 1)
+	n := 0
+	for so := 0; so < len(src.Pix); so += 4 {
+		ri := (uint32(src.Pix[so]) >> shift) & mask
+		gi := (uint32(src.Pix[so+1]) >> shift) & mask
+		bi := (uint32(src.Pix[so+2]) >> shift) & mask
+		out[n] = t[mortonIdx(ri, gi, bi)]
+		n++
+	}
+}
+
+// ---- memory floor: read 4 bytes, write index, no matching ----
+func scanNull(src *image.RGBA, out []int32) {
+	n := 0
+	for so := 0; so < len(src.Pix); so += 4 {
+		out[n] = int32(src.Pix[so]) & 0
+		n++
+	}
+}
+
+// ---- exactness: Hamerly and SoA must match the shipped stdlib oracle ----
+func TestVarianceExactness(t *testing.T) {
+	img := benchImage(t)
+	for _, name := range []string{"nes", "lego"} {
+		pal := benchPal(t, name)
+		tab := make([]pal16, len(pal))
+		for i, e := range pal {
+			tab[i] = pal16FromRGBA(e.R, e.G, e.B, 255)
+		}
+		total := len(img.Pix) / 4
+		want := make([]int32, total)
+		scanLinearAoS(pal, img, want)
+
+		soa := make([]int32, total)
+		scanLinearSoA(pal, img, soa)
+		ham := make([]int32, total)
+		hit := scanHamerly(pal, img, ham)
+		p16 := make([]int32, total)
+		scanLinearPal16_3ch(pal, img, p16)
+		var soaMiss, hamMiss, p16Miss int
+		for i := range want {
+			if soa[i] != want[i] {
+				soaMiss++
+			}
+			if ham[i] != want[i] {
+				hamMiss++
+			}
+			if p16[i] != want[i] {
+				p16Miss++
+			}
+		}
+		t.Logf("%s P=%d (real img): SoA-8bit miss=%d  Hamerly miss=%d  pal16_3ch miss=%d  coherence-hit=%.3f",
+			name, len(pal), soaMiss, hamMiss, p16Miss, hit)
+		_ = tab
+
+		// Adversarial: random noise is the hard case for the per-channel >>2
+		// floor. pal16_3ch (the ship candidate) MUST be bit-identical here;
+		// the 8-bit int32 SoA form is allowed to diverge (it does not floor).
+		for _, seed := range []int64{1, 7, 99} {
+			noise := randomImage(257, 263, seed)
+			nt := len(noise.Pix) / 4
+			w2 := make([]int32, nt)
+			scanLinearAoS(pal, noise, w2) // stdlib-exact (indexRaw)
+			g2 := make([]int32, nt)
+			scanLinearPal16_3ch(pal, noise, g2)
+			miss := 0
+			for i := range w2 {
+				if g2[i] != w2[i] {
+					miss++
+				}
+			}
+			if miss != 0 {
+				t.Errorf("%s seed=%d: pal16_3ch NOT bit-identical on noise: %d/%d mismatches", name, seed, miss, nt)
+			}
+		}
+	}
+}
+
+var sink int32
+
+func benchScan(b *testing.B, fn func(out []int32), total int) {
+	out := make([]int32, total)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		fn(out)
+	}
+	b.StopTimer()
+	sink += out[total/2]
+	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(total), "ns/px")
+}
+
+func BenchmarkVar(b *testing.B) {
+	img := benchImage(b)
+	total := len(img.Pix) / 4
+	nes := benchPal(b, "nes")   // P=64
+	lego := benchPal(b, "lego") // P=188
+
+	gameboy := benchPal(b, "gameboy") // P=4
+	pico8 := benchPal(b, "pico8")     // P=16
+
+	b.Run("Null", func(b *testing.B) { benchScan(b, func(o []int32) { scanNull(img, o) }, total) })
+
+	// Small-P regime (the path that actually uses the linear scan today).
+	for _, pp := range []struct {
+		name string
+		pal  Palette[EntryMeta]
+	}{{"P4", gameboy}, {"P16", pico8}, {"P64", nes}} {
+		pal := pp.pal
+		b.Run("AoS4ch/"+pp.name, func(b *testing.B) { benchScan(b, func(o []int32) { scanLinearAoS(pal, img, o) }, total) })
+		b.Run("AoS3ch/"+pp.name, func(b *testing.B) { benchScan(b, func(o []int32) { scanLinearAoS3(pal, img, o) }, total) })
+		b.Run("SoA3ch/"+pp.name, func(b *testing.B) { benchScan(b, func(o []int32) { scanLinearSoA(pal, img, o) }, total) })
+		b.Run("Pal16_3ch/"+pp.name, func(b *testing.B) { benchScan(b, func(o []int32) { scanLinearPal16_3ch(pal, img, o) }, total) })
+	}
+	b.Run("Hamerly/P64", func(b *testing.B) { benchScan(b, func(o []int32) { scanHamerly(nes, img, o) }, total) })
+
+	b.Run("LinearAoS/P188", func(b *testing.B) { benchScan(b, func(o []int32) { scanLinearAoS(lego, img, o) }, total) })
+	b.Run("LinearSoA/P188", func(b *testing.B) { benchScan(b, func(o []int32) { scanLinearSoA(lego, img, o) }, total) })
+	b.Run("Hamerly/P188", func(b *testing.B) { benchScan(b, func(o []int32) { scanHamerly(lego, img, o) }, total) })
+
+	// kd (shipped) for the large-P reference point.
+	tree188 := buildKDTree(lego)
+	b.Run("KD/P188", func(b *testing.B) {
+		benchScan(b, func(o []int32) {
+			var ks kdSearch
+			n := 0
+			for so := 0; so < len(img.Pix); so += 4 {
+				o[n] = int32(tree188.match(&ks, img.Pix[so], img.Pix[so+1], img.Pix[so+2]))
+				n++
+			}
+		}, total)
+	})
+
+	// LUT layouts (P-independent; use lego).
+	rm := buildLUTRowMajor(lego, 6)
+	mz := buildLUTMorton(lego, 6)
+	b.Run("LUTRowMajor", func(b *testing.B) { benchScan(b, func(o []int32) { queryLUTRowMajor(rm, img, 6, o) }, total) })
+	b.Run("LUTMorton", func(b *testing.B) { benchScan(b, func(o []int32) { queryLUTMorton(mz, img, 6, o) }, total) })
+}

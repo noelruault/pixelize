@@ -1,0 +1,38 @@
+215: #define MaxTreeDepth  8
+334:   ClosestColor(const Image *,CubeInfo *,const NodeInfo *),
+451: static inline size_t ColorToNodeId(const CubeInfo *cube_info,
+582:           for (index=MaxTreeDepth-1; (ssize_t) index > 0; index--)
+584:             id=ColorToNodeId(&cube,&pixel,index);
+595:           ClosestColor(image,&cube,node_info->parent);
+814:       index=MaxTreeDepth-1;
+818:       for (level=1; level <= MaxTreeDepth; level++)
+824:         id=ColorToNodeId(cube_info,&pixel,index);
+842:             if (level == MaxTreeDepth)
+918:       index=MaxTreeDepth-1;
+928:         id=ColorToNodeId(cube_info,&pixel,index);
+1054: %  ClosestColor() traverses the color cube tree at a particular node and
+1057: %  The format of the ClosestColor method is:
+1059: %      void ClosestColor(const Image *image,CubeInfo *cube_info,
+1072: static void ClosestColor(const Image *image,CubeInfo *cube_info,
+1087:       ClosestColor(image,cube_info,node_info->child[i]);
+1178:   quantize_info.tree_depth=MaxTreeDepth;
+1591:           for (index=MaxTreeDepth-1; (ssize_t) index > 0; index--)
+1593:             id=ColorToNodeId(&cube,&pixel,index);
+1604:           ClosestColor(image,&cube,node_info->parent);
+1849:           for (index=MaxTreeDepth-1; (ssize_t) index > 0; index--)
+1851:             id=ColorToNodeId(cube_info,&pixel,index);
+1862:           ClosestColor(image,p,node_info->parent);
+2004:   if (cube_info->depth > MaxTreeDepth)
+2005:     cube_info->depth=MaxTreeDepth;
+2450:   quantize_info->tree_depth=MaxTreeDepth;
+2678:         depth=MaxTreeDepth;
+3083: %  RemapImage() replaces the colors of an image with the closest color from
+3086: %  The format of the RemapImage method is:
+3088: %      MagickBooleanType RemapImage(const QuantizeInfo *quantize_info,
+3100: MagickExport MagickBooleanType RemapImage(const QuantizeInfo *quantize_info,
+3118:   cube_info=GetCubeInfo(quantize_info,MaxTreeDepth,
+3148: %  RemapImages() replaces the colors of a sequence of images with the
+3151: %  The format of the RemapImage method is:
+3153: %      MagickBooleanType RemapImages(const QuantizeInfo *quantize_info,
+3165: MagickExport MagickBooleanType RemapImages(const QuantizeInfo *quantize_info,
+3193:   cube_info=GetCubeInfo(quantize_info,MaxTreeDepth,

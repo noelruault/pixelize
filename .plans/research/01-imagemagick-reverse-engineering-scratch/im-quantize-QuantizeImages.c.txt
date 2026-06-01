@@ -1,0 +1,407 @@
+MagickExport MagickBooleanType QuantizeImages(const QuantizeInfo *quantize_info,
+  Image *images)
+{
+  CubeInfo
+    *cube_info;
+
+  Image
+    *image;
+
+  MagickBooleanType
+    proceed,
+    status;
+
+  MagickProgressMonitor
+    progress_monitor;
+
+  size_t
+    depth,
+    maximum_colors,
+    number_images;
+
+  ssize_t
+    i;
+
+  assert(quantize_info != (const QuantizeInfo *) NULL);
+  assert(quantize_info->signature == MagickCoreSignature);
+  assert(images != (Image *) NULL);
+  assert(images->signature == MagickCoreSignature);
+  if (IsEventLogging() != MagickFalse)
+    (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",images->filename);
+  if (GetNextImageInList(images) == (Image *) NULL)
+    {
+      /*
+        Handle a single image with QuantizeImage.
+      */
+      status=QuantizeImage(quantize_info,images);
+      return(status);
+    }
+  status=MagickFalse;
+  maximum_colors=quantize_info->number_colors;
+  if (maximum_colors == 0)
+    maximum_colors=MaxColormapSize;
+  if (maximum_colors > MaxColormapSize)
+    maximum_colors=MaxColormapSize;
+  depth=quantize_info->tree_depth;
+  if (depth == 0)
+    {
+      size_t
+        colors;
+
+      /*
+        Depth of color tree is: Log4(colormap size)+2.
+      */
+      colors=maximum_colors;
+      for (depth=1; colors != 0; depth++)
+        colors>>=2;
+      if (quantize_info->dither != MagickFalse)
+        depth--;
+    }
+  /*
+    Initialize color cube.
+  */
+  cube_info=GetCubeInfo(quantize_info,depth,maximum_colors);
+  if (cube_info == (CubeInfo *) NULL)
+    {
+      (void) ThrowMagickException(&images->exception,GetMagickModule(),
+        ResourceLimitError,"MemoryAllocationFailed","`%s'",images->filename);
+      return(MagickFalse);
+    }
+  number_images=GetImageListLength(images);
+  image=images;
+  for (i=0; image != (Image *) NULL; i++)
+  {
+    progress_monitor=SetImageProgressMonitor(image,(MagickProgressMonitor) NULL,
+      image->client_data);
+    status=ClassifyImageColors(cube_info,image,&image->exception);
+    if (status == MagickFalse)
+      break;
+    (void) SetImageProgressMonitor(image,progress_monitor,image->client_data);
+    proceed=SetImageProgress(image,AssignImageTag,(MagickOffsetType) i,
+      number_images);
+    if (proceed == MagickFalse)
+      break;
+    image=GetNextImageInList(image);
+  }
+  if (status != MagickFalse)
+    {
+      /*
+        Reduce the number of colors in an image sequence.
+      */
+      ReduceImageColors(images,cube_info);
+      image=images;
+      for (i=0; image != (Image *) NULL; i++)
+      {
+        progress_monitor=SetImageProgressMonitor(image,(MagickProgressMonitor)
+          NULL,image->client_data);
+        status=AssignImageColors(image,cube_info);
+        if (status == MagickFalse)
+          break;
+        (void) SetImageProgressMonitor(image,progress_monitor,
+          image->client_data);
+        proceed=SetImageProgress(image,AssignImageTag,(MagickOffsetType) i,
+          number_images);
+        if (proceed == MagickFalse)
+          break;
+        image=GetNextImageInList(image);
+      }
+    }
+  DestroyCubeInfo(cube_info);
+  return(status);
+}
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
++   Q u a n t i z e E r r o r F l a t t e n                                   %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  QuantizeErrorFlatten() traverses the color cube and flattens the quantization
+%  error into a sorted 1D array.  This accelerates the color reduction process.
+%
+%  Contributed by Yoya.
+%
+%  The format of the QuantizeErrorFlatten method is:
+%
+%      size_t QuantizeErrorFlatten(const CubeInfo *cube_info,
+%        const NodeInfo *node_info,const ssize_t offset,
+%        MagickRealType *quantize_error)
+%
+%  A description of each parameter follows.
+%
+%    o cube_info: A pointer to the Cube structure.
+%
+%    o node_info: pointer to node in color cube tree that is current pointer.
+%
+%    o offset: quantize error offset.
+%
+%    o quantize_error: the quantization error vector.
+%
+*/
+static size_t QuantizeErrorFlatten(const CubeInfo *cube_info,
+  const NodeInfo *node_info,const ssize_t offset,
+  MagickRealType *quantize_error)
+{
+  size_t
+    n,
+    number_children;
+
+  ssize_t
+    i;
+
+  if (offset >= (ssize_t) cube_info->nodes)
+    return(0);
+  quantize_error[offset]=node_info->quantize_error;
+  n=1;
+  number_children=cube_info->associate_alpha == MagickFalse ? 8UL : 16UL;
+  for (i=0; i < (ssize_t) number_children ; i++)
+    if (node_info->child[i] != (NodeInfo *) NULL)
+      n+=QuantizeErrorFlatten(cube_info,node_info->child[i],offset+n,
+        quantize_error);
+  return(n);
+}
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
++   R e d u c e                                                               %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  Reduce() traverses the color cube tree and prunes any node whose
+%  quantization error falls below a particular threshold.
+%
+%  The format of the Reduce method is:
+%
+%      Reduce(CubeInfo *cube_info,const NodeInfo *node_info)
+%
+%  A description of each parameter follows.
+%
+%    o cube_info: A pointer to the Cube structure.
+%
+%    o node_info: pointer to node in color cube tree that is to be pruned.
+%
+*/
+static void Reduce(CubeInfo *cube_info,const NodeInfo *node_info)
+{
+  size_t
+    number_children;
+
+  ssize_t
+    i;
+
+  /*
+    Traverse any children.
+  */
+  number_children=cube_info->associate_alpha == MagickFalse ? 8UL : 16UL;
+  for (i=0; i < (ssize_t) number_children; i++)
+    if (node_info->child[i] != (NodeInfo *) NULL)
+      Reduce(cube_info,node_info->child[i]);
+  if (node_info->quantize_error <= cube_info->pruning_threshold)
+    PruneChild(cube_info,node_info);
+  else
+    {
+      /*
+        Find minimum pruning threshold.
+      */
+      if (node_info->number_unique > 0)
+        cube_info->colors++;
+      if (node_info->quantize_error < cube_info->next_threshold)
+        cube_info->next_threshold=node_info->quantize_error;
+    }
+}
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
++   R e d u c e I m a g e C o l o r s                                         %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  ReduceImageColors() repeatedly prunes the tree until the number of nodes
+%  with n2 > 0 is less than or equal to the maximum number of colors allowed
+%  in the output image.  On any given iteration over the tree, it selects
+%  those nodes whose E value is minimal for pruning and merges their
+%  color statistics upward. It uses a pruning threshold, Ep, to govern
+%  node selection as follows:
+%
+%    Ep = 0
+%    while number of nodes with (n2 > 0) > required maximum number of colors
+%      prune all nodes such that E <= Ep
+%      Set Ep to minimum E in remaining nodes
+%
+%  This has the effect of minimizing any quantization error when merging
+%  two nodes together.
+%
+%  When a node to be pruned has offspring, the pruning procedure invokes
+%  itself recursively in order to prune the tree from the leaves upward.
+%  n2,  Sr, Sg,  and  Sb in a node being pruned are always added to the
+%  corresponding data in that node's parent.  This retains the pruned
+%  node's color characteristics for later averaging.
+%
+%  For each node, n2 pixels exist for which that node represents the
+%  smallest volume in RGB space containing those pixel's colors.  When n2
+%  > 0 the node will uniquely define a color in the output image. At the
+%  beginning of reduction,  n2 = 0  for all nodes except a the leaves of
+%  the tree which represent colors present in the input image.
+%
+%  The other pixel count, n1, indicates the total number of colors
+%  within the cubic volume which the node represents.  This includes n1 -
+%  n2  pixels whose colors should be defined by nodes at a lower level in
+%  the tree.
+%
+%  The format of the ReduceImageColors method is:
+%
+%      ReduceImageColors(const Image *image,CubeInfo *cube_info)
+%
+%  A description of each parameter follows.
+%
+%    o image: the image.
+%
+%    o cube_info: A pointer to the Cube structure.
+%
+*/
+
+static int MagickRealTypeCompare(const void *error_p,const void *error_q)
+{
+  MagickRealType
+    *p,
+    *q;
+
+  p=(MagickRealType *) error_p;
+  q=(MagickRealType *) error_q;
+  if (*p > *q)
+    return(1);
+  if (fabs((double) (*q-*p)) <= MagickEpsilon)
+    return(0);
+  return(-1);
+}
+
+static void ReduceImageColors(const Image *image,CubeInfo *cube_info)
+{
+#define ReduceImageTag  "Reduce/Image"
+
+  MagickBooleanType
+    proceed;
+
+  MagickOffsetType
+    offset;
+
+  size_t
+    span;
+
+  cube_info->next_threshold=0.0;
+  if (cube_info->colors > cube_info->maximum_colors)
+    {
+      MagickRealType
+        *quantize_error;
+
+      /*
+        Enable rapid reduction of the number of unique colors.
+      */
+      quantize_error=(MagickRealType *) AcquireQuantumMemory(cube_info->nodes,
+        sizeof(*quantize_error));
+      if (quantize_error != (MagickRealType *) NULL)
+        {
+          (void) QuantizeErrorFlatten(cube_info,cube_info->root,0,
+            quantize_error);
+          qsort(quantize_error,cube_info->nodes,sizeof(MagickRealType),
+            MagickRealTypeCompare);
+          if (cube_info->nodes > (110*(cube_info->maximum_colors+1)/100))
+            cube_info->next_threshold=quantize_error[cube_info->nodes-110*
+              (cube_info->maximum_colors+1)/100];
+          quantize_error=(MagickRealType *) RelinquishMagickMemory(
+            quantize_error);
+        }
+  }
+  for (span=cube_info->colors; cube_info->colors > cube_info->maximum_colors; )
+  {
+    cube_info->pruning_threshold=cube_info->next_threshold;
+    cube_info->next_threshold=cube_info->root->quantize_error-1;
+    cube_info->colors=0;
+    Reduce(cube_info,cube_info->root);
+    offset=(MagickOffsetType) span-cube_info->colors;
+    proceed=SetImageProgress(image,ReduceImageTag,offset,span-
+      cube_info->maximum_colors+1);
+    if (proceed == MagickFalse)
+      break;
+  }
+}
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%   R e m a p I m a g e                                                       %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  RemapImage() replaces the colors of an image with the closest color from
+%  a reference image.
+%
+%  The format of the RemapImage method is:
+%
+%      MagickBooleanType RemapImage(const QuantizeInfo *quantize_info,
+%        Image *image,const Image *remap_image)
+%
+%  A description of each parameter follows:
+%
+%    o quantize_info: Specifies a pointer to an QuantizeInfo structure.
+%
+%    o image: the image.
+%
+%    o remap_image: the reference image.
+%
+*/
+MagickExport MagickBooleanType RemapImage(const QuantizeInfo *quantize_info,
+  Image *image,const Image *remap_image)
+{
+  CubeInfo
+    *cube_info;
+
+  MagickBooleanType
+    status;
+
+  /*
+    Initialize color cube.
+  */
+  assert(image != (Image *) NULL);
+  assert(image->signature == MagickCoreSignature);
+  if (IsEventLogging() != MagickFalse)
+    (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
+  assert(remap_image != (Image *) NULL);
+  assert(remap_image->signature == MagickCoreSignature);
+  cube_info=GetCubeInfo(quantize_info,MaxTreeDepth,
+    quantize_info->number_colors);
+  if (cube_info == (CubeInfo *) NULL)
+    ThrowBinaryImageException(ResourceLimitError,"MemoryAllocationFailed",
+      image->filename);
+  cube_info->quantize_info->colorspace=remap_image->colorspace;
+  status=ClassifyImageColors(cube_info,remap_image,&image->exception);
+  if (status != MagickFalse)
+    {
+      /*
+        Classify image colors from the reference image.
+      */
+      cube_info->quantize_info->number_colors=cube_info->colors;
+      status=AssignImageColors(image,cube_info);
+    }
+  DestroyCubeInfo(cube_info);
+  return(status);
+}

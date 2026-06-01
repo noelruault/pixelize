@@ -15,20 +15,25 @@ import (
 // pipelineFlags collects the flag values used by the default, batch,
 // and watch commands.
 type pipelineFlags struct {
-	size      string
-	palette   string
-	mode      string
-	dither    bool
-	sizeList  string
-	gifPath   string
-	loop      string
-	preview   bool
-	stats     bool
-	asJSON    bool
-	buildMap  string
-	pieces    string
-	output    string
-	verbose   int
+	size     string
+	palette  string
+	mode     string
+	dither   bool
+	sizeList string
+	gifPath  string
+	loop     string
+	preview  bool
+	stats    bool
+	asJSON   bool
+	buildMap string
+	pieces   string
+	output   string
+	verbose  int
+	lut      bool
+
+	// fastLUT, when set, is a prebuilt Fast-mode table reused across calls
+	// (batch/watch build it once for the whole run). Not a flag.
+	fastLUT *pixelize.FastLUT
 }
 
 func registerPipeline(fs *flag.FlagSet) *pipelineFlags {
@@ -49,6 +54,16 @@ func registerPipeline(fs *flag.FlagSet) *pipelineFlags {
 	fs.BoolFunc("v", "verbose (info)", func(string) error { pf.verbose = 1; return nil })
 	fs.BoolFunc("vv", "very verbose (debug)", func(string) error { pf.verbose = 2; return nil })
 	return pf
+}
+
+// registerLUTFlags wires the -lut flag and its -lookup-table long alias to the
+// same target on fs. Only batch and watch call this: the lookup table is built
+// once and amortized across many renders, so it has no place on the
+// single-image command (where the exact path is already fast and more
+// accurate). help describes -lut; the alias shares the target variable.
+func registerLUTFlags(fs *flag.FlagSet, pf *pipelineFlags, help string) {
+	fs.BoolVar(&pf.lut, "lut", false, help)
+	fs.BoolVar(&pf.lut, "lookup-table", false, "alias of -lut")
 }
 
 // parseInterleaved splits args into flag args (parsed via fs) and

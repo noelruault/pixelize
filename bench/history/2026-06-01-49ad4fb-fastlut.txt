@@ -1,0 +1,48 @@
+commit:      49ad4fb  feat: add opt-in 6-bit Fast-mode LUT for batch/watch (report 11)
+commit-sha:  49ad4fb5323843966af0615b3346441b07b8e3c5
+prior:       dc06a92 (exact-kd) -- the bar Fast mode must beat to be worth it
+date:        2026-06-01T12:16:43Z
+machine:     Linux x86_64, 4 cores
+cpu:         Intel(R) Xeon(R) Processor @ 2.10GHz
+go:          go1.25.0
+scope:       Phase 3 -- opt-in 6-bit Fast-mode LUT (report 11 winner), APPROXIMATE
+
+what/why
+--------
+Precomputed 6-bit nearest-index LUT, one lookup/pixel. Opt-in (ApplyOptions
+.Fast / .FastLUT). NOT the default; exact stays default. Gated to batch/watch
+reuse, where build cost amortizes.
+
+accuracy (this path is APPROXIMATE -- gate is a BOUND, not bit-identical)
+------------------------------------------------------------------------
+go test -run TestFastLUTAccuracy : PASS (ceiling 12%)
+  non-nearest rate on hard noise input: P16 2.0% / P64 3.7% / P256 6.4%.
+  report 11 painting figures: 1.9 / 4.3 / 5.8%. In range.
+go test -run TestFastLUTReuseMatchesPerCall : PASS (reused LUT == per-call build)
+full suite under -race : PASS (incl. exact gates -- applyNearest stayed
+  bit-identical through the runScan extraction)
+
+speed (in-process Go benchmark, 4 cores)
+----------------------------------------
+op                       time
+FastLUT build (P256)     78 ms   (one-time, palette-fixed)
+Fast query (8K/P256)     700 ms
+exact-kd  (8K/P256)      2868 ms
+  one-shot 8K/P256: Fast total 78+700=778 ms < kd 2868 ms (build amortizes
+    over 33M px even one-shot at this size).
+  batch (reuse): per image 700 ms vs 2868 ms = ~4.1x, build -> ~0.
+  small images: build dominates, exact wins -> hence batch/watch gating.
+
+efficiency gate (gate 4) + correctness exception
+------------------------------------------------
+Fast mode is the OPT-IN approximate path (rubric exception): it relaxes
+exactness only on explicit request. Where chosen, it is strictly faster on
+total wall-clock in its gated regime (large images / reuse). RAM: 1 MiB int32
+table (report 11: <=8 MiB even at 7-bit; no 8K OOM). Passes.
+
+caveats
+-------
+- Approximate by design; declared accuracy cost. Exact remains the default.
+- Built on the default metric only; ignored under Dither or custom Distance.
+- Matches as if opaque (ignores source alpha).
+- Shared 4-vCPU container: absolute ms +-10-15%; ratios trustworthy.

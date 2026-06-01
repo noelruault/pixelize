@@ -1,0 +1,38 @@
+commit:      9264082  feat: parallelize the exact nearest-color scan
+commit-sha:  92640827a48453abdae388c47dea5eca23b6264c
+tree:        clean (numbers measured from this committed state)
+date:        2026-06-01T10:26:34Z
+machine:     Linux x86_64, 4 cores
+cpu:         Intel(R) Xeon(R) Processor @ 2.10GHz
+go:          go1.25.0
+scope:       Phase 1 task 2.1 — parallelize the exact nearest-color scan
+
+what/why
+--------
+Split applyNearest into row-band parallel workers (GOMAXPROCS), serial
+below 65536 px. Per-pixel decision unchanged, so output is bit-identical.
+This entry records the first algorithm change under the benchmark-history
+protocol.
+
+exactness (gate 1: no exact path may become non-exact)
+------------------------------------------------------
+go test -run TestParallelMatchesSerial -race : PASS
+  bit-for-bit identical image+indices+usage vs serial reference,
+  across {16x16, 255x257, 512x512, 300x1} x P{1,16,64,256} x {stdlib, euclidean}.
+  0 differing pixels. No data race.
+go test ./ (golden hashes) : PASS
+
+speed (in-process Go benchmark, randomImage noise, best-of available reps)
+--------------------------------------------------------------------------
+cell        1 core        4 cores       speedup
+2K / P=256  6.614 s/op    1.798 s/op    3.68x
+2K / P=16   1.095 s/op    0.341 s/op    3.21x
+
+notes
+-----
+- Speedup matches the report 07 prediction (~3.5-3.9x quiet, ~2-2.5x contended).
+- Allocation unchanged (~4.2M allocs/op): src.At() retained for bit-exactness.
+  Flat src.Pix access (FLAT infra) is a separate follow-up.
+- Shared 4-vCPU container: absolute ms +-10-15%; the 1->4 core ratio is the
+  trustworthy figure.
+- regression gate: first entry, no prior baseline to regress against.

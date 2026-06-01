@@ -1,0 +1,81 @@
+
+  size_t
+    colors,
+    maximum_colors;
+
+  ssize_t
+    transparent_index;
+
+  MagickSizeType
+    transparent_pixels;
+
+  DoublePixelPacket
+    target;
+
+  MagickRealType
+    distance,
+    pruning_threshold,
+    next_threshold;
+
+  size_t
+    nodes,
+    free_nodes,
+    color_number;
+
+  NodeInfo
+    *next_node;
+
+  Nodes
+    *node_queue;
+
+  MemoryInfo
+    *memory_info;
+
+  ssize_t
+    *cache;
+
+  DoublePixelPacket
+    error[ErrorQueueLength];
+
+  MagickRealType
+    diffusion,
+    weights[ErrorQueueLength];
+
+  QuantizeInfo
+    *quantize_info;
+
+  MagickBooleanType
+    associate_alpha;
+
+  ssize_t
+    x,
+    y;
+
+  size_t
+    depth;
+
+  MagickOffsetType
+    offset;
+
+  MagickSizeType
+    span;
+} CubeInfo;
+
+/*
+  Method prototypes.
+*/
+static CubeInfo
+  *GetCubeInfo(const QuantizeInfo *,const size_t,const size_t);
+
+static NodeInfo
+  *GetNodeInfo(CubeInfo *,const size_t,const size_t,NodeInfo *);
+
+static MagickBooleanType
+  AssignImageColors(Image *,CubeInfo *),
+  ClassifyImageColors(CubeInfo *,const Image *,ExceptionInfo *),
+  DitherImage(Image *,CubeInfo *),
+  SetGrayscaleImage(Image *);
+
+static void
+  ClosestColor(const Image *,CubeInfo *,const NodeInfo *),
+  DefineImageColormap(Image *,CubeInfo *,NodeInfo *),

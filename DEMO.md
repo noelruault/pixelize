@@ -327,6 +327,39 @@ Eight inputs → eight Game Boy 4-color outputs:
 
 Workers default to `runtime.NumCPU()`, override with `-workers N`.
 
+### 9b. Lookup-table mode for bulk runs (`-lut` / `-lookup-table`)
+
+By default pixelize matches every pixel **exactly** (nearest palette color, bit
+-identical to the reference). For a one-off image that exact path is already fast
+and most accurate, so single-image conversion does not offer the flag.
+
+When you process **many** images against the **same** palette (`batch`) or rerun on
+every save (`watch`), add `-lut` (long form `-lookup-table`) to precompute a 6-bit
+color lookup table **once** and reuse it for every render:
+
+```sh
+pixelize batch docs/demo/inputs -palette nes -size 200x0 -lut \
+  -o /tmp/out-lut
+# logs: "lut: built shared lookup table" palette_size=64
+```
+
+```sh
+# long form is identical
+pixelize batch docs/demo/inputs -palette nes -size 200x0 -lookup-table -o /tmp/out
+```
+
+The table makes each pixel a single array lookup instead of a palette search, so
+the per-image matcher cost stops growing with palette size. It is **approximate**
+(~2–6% of pixels may differ from the exact nearest, bounded and tested), which is
+why it is opt-in and reserved for the build-once-reuse-many case — for a single
+image the build cost would not be amortized and the exact path wins. Single-image
+conversion therefore rejects the flag:
+
+```sh
+pixelize docs/demo/inputs/starry.jpg -palette nes -lut -o out.png
+# error: flag provided but not defined: -lut
+```
+
 ## 10. Palette swatches
 
 ```sh
@@ -390,6 +423,7 @@ Files in the user dir win over embedded copies. Edit `~/.config/pixelize/palette
 | `palettes list / init / where` | sections 1, 13 |
 | `palette NAME -show` (swatch PNG) | section 10 + palette table |
 | `batch DIR` concurrent | section 9 |
+| `-lut` / `-lookup-table` bulk lookup-table mode (batch/watch only) | section 9b |
 | `watch IMAGE` fsnotify rerun | section 12 |
 | Terminal preview (iTerm2 / Kitty / ANSI) | section 11 |
 | WebP input | not exercised (no source supplied) |

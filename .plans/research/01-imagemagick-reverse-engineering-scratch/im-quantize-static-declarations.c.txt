@@ -1,0 +1,46 @@
+static void
+  ClosestColor(const Image *,CubeInfo *,const NodeInfo *),
+  DefineImageColormap(Image *,CubeInfo *,NodeInfo *),
+  DestroyCubeInfo(CubeInfo *),
+  PruneLevel(CubeInfo *,const NodeInfo *),
+  PruneToCubeDepth(CubeInfo *,const NodeInfo *),
+  ReduceImageColors(const Image *,CubeInfo *);
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%   A c q u i r e Q u a n t i z e I n f o                                     %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  AcquireQuantizeInfo() allocates the QuantizeInfo structure.
+%
+%  The format of the AcquireQuantizeInfo method is:
+%
+%      QuantizeInfo *AcquireQuantizeInfo(const ImageInfo *image_info)
+%
+%  A description of each parameter follows:
+%
+%    o image_info: the image info.
+%
+*/
+MagickExport QuantizeInfo *AcquireQuantizeInfo(const ImageInfo *image_info)
+{
+  QuantizeInfo
+    *quantize_info;
+
+  quantize_info=(QuantizeInfo *) AcquireMagickMemory(sizeof(*quantize_info));
+  if (quantize_info == (QuantizeInfo *) NULL)
+    ThrowFatalException(ResourceLimitFatalError,"MemoryAllocationFailed");
+  GetQuantizeInfo(quantize_info);
+  if (image_info != (ImageInfo *) NULL)
+    {
+      const char
+        *option;
+
+      quantize_info->dither=image_info->dither;
+      option=GetImageOpti

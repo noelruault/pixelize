@@ -15,6 +15,18 @@ import (
 // serial. ~256x256.
 const parallelMinPixels = 1 << 16
 
+// Run-length gating (research report 10). A horizontal "same as the previous
+// pixel" short-circuit computes the nearest index once per run of identical
+// pixels and fills the span, which is a large win on coherent content (flat
+// regions, pixel art: up to ~100x) and bit-identical to the per-pixel scan.
+// On incoherent content (noise, photos) it is neutral, so it is gated on a
+// cheap coherence probe: enable only when the sampled fraction of pixels
+// equal to their left neighbor is at least runLengthMinCoherence.
+const (
+	runLengthProbeSamples = 4096
+	runLengthMinCoherence = 0.10
+)
+
 // Entry is one palette color plus arbitrary typed metadata.
 //
 // M is the metadata type chosen by the consumer: a string name, a
@@ -137,12 +149,62 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 		cp = p.ColorPalette()
 	}
 
+	// Enable the run-length short-circuit only when the source is coherent
+	// enough for it to pay off (report 10). The probe is O(samples), so its
+	// cost is negligible and independent of image size.
+	useRunLength := coherenceProbe(src, runLengthProbeSamples) >= runLengthMinCoherence
+
 	// scanBand quantizes rows [y0, y1), writing out.Pix and indices and
 	// tallying into counts (len == nColors). The path branch is hoisted out
 	// of the inner loop so the hot path is a tight per-pixel scan. The kd
 	// path keeps its own per-band search scratch (no shared mutable state).
 	scanBand := func(y0, y1 int, counts []int) {
 		var ks kdSearch
+
+		// Run-length path: extend each horizontal run of identical pixels,
+		// resolve the nearest index once for the run via the active matcher,
+		// and fill the span. The matcher is called once per run (not per
+		// pixel), so the per-run path switch is free. Bit-identical to the
+		// per-pixel scan: identical pixels resolve to the identical index.
+		if useRunLength {
+			matchOne := func(pr, pg, pb, pa uint8) int {
+				switch {
+				case useKD:
+					return tree.match(&ks, pr, pg, pb)
+				case useStdlib:
+					return indexRaw(pr, pg, pb, pa, tab)
+				default:
+					return nearest(color.RGBA{R: pr, G: pg, B: pb, A: pa}, cp, dist)
+				}
+			}
+			for y := y0; y < y1; y++ {
+				so := src.PixOffset(b.Min.X, y)
+				oo := out.PixOffset(b.Min.X, y)
+				yi := y - b.Min.Y
+				xi := 0
+				for xi < w {
+					pr, pg, pb, pa := src.Pix[so], src.Pix[so+1], src.Pix[so+2], src.Pix[so+3]
+					runEnd := xi + 1
+					sp := so + 4
+					for runEnd < w && src.Pix[sp] == pr && src.Pix[sp+1] == pg && src.Pix[sp+2] == pb && src.Pix[sp+3] == pa {
+						runEnd++
+						sp += 4
+					}
+					idx := matchOne(pr, pg, pb, pa)
+					e := p[idx]
+					for x := xi; x < runEnd; x++ {
+						out.Pix[oo], out.Pix[oo+1], out.Pix[oo+2], out.Pix[oo+3] = e.R, e.G, e.B, 255
+						indices[x][yi] = idx
+						oo += 4
+					}
+					counts[idx] += runEnd - xi
+					so = sp
+					xi = runEnd
+				}
+			}
+			return
+		}
+
 		for y := y0; y < y1; y++ {
 			so := src.PixOffset(b.Min.X, y)
 			oo := out.PixOffset(b.Min.X, y)
@@ -316,6 +378,53 @@ func indexRaw(pr, pg, pb, pa uint8, tab []pal16) int {
 		}
 	}
 	return ret
+}
+
+// coherenceProbe samples ~sampleN pixels across evenly spaced rows and
+// returns the fraction whose RGBA equals the immediately-preceding pixel in
+// the row. Cost is O(sampleN), independent of image size, so it is cheap
+// enough to run on every Apply to decide whether the run-length path pays off.
+func coherenceProbe(src *image.RGBA, sampleN int) float64 {
+	b := src.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w < 2 || h < 1 {
+		return 0
+	}
+	rows := sampleN / (w - 1)
+	if rows < 1 {
+		rows = 1
+	}
+	if rows > 16 {
+		rows = 16
+	}
+	rowStep := h / rows
+	if rowStep < 1 {
+		rowStep = 1
+	}
+	perRow := sampleN / rows
+	if perRow > w-1 {
+		perRow = w - 1
+	}
+	var seen, eq int
+	for ri := 0; ri < rows; ri++ {
+		yoff := ri * rowStep
+		if yoff >= h {
+			break
+		}
+		base := src.PixOffset(b.Min.X, b.Min.Y+yoff)
+		for x := 1; x <= perRow; x++ {
+			o := base + x*4
+			if src.Pix[o] == src.Pix[o-4] && src.Pix[o+1] == src.Pix[o-3] &&
+				src.Pix[o+2] == src.Pix[o-2] && src.Pix[o+3] == src.Pix[o-1] {
+				eq++
+			}
+			seen++
+		}
+	}
+	if seen == 0 {
+		return 0
+	}
+	return float64(eq) / float64(seen)
 }
 
 // countsToUsage converts a per-index count array to the sparse Usage map,

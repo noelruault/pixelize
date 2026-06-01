@@ -143,6 +143,84 @@ func TestParallelMatchesSerial(t *testing.T) {
 	}
 }
 
+// blockyImage builds a deterministic coherent image: every block×block tile
+// is a single random color, so consecutive pixels in a row are usually equal.
+// This drives the coherence probe high and exercises the run-length path.
+func blockyImage(w, h, block int, seed int64, opaque bool) *image.RGBA {
+	r := rand.New(rand.NewSource(seed))
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for by := 0; by < h; by += block {
+		for bx := 0; bx < w; bx += block {
+			cr, cg, cb := uint8(r.Intn(256)), uint8(r.Intn(256)), uint8(r.Intn(256))
+			ca := uint8(255)
+			if !opaque {
+				ca = uint8(r.Intn(256))
+			}
+			for y := by; y < by+block && y < h; y++ {
+				for x := bx; x < bx+block && x < w; x++ {
+					o := img.PixOffset(x, y)
+					img.Pix[o], img.Pix[o+1], img.Pix[o+2], img.Pix[o+3] = cr, cg, cb, ca
+				}
+			}
+		}
+	}
+	return img
+}
+
+// TestRunLengthMatchesSerial is the exactness gate for the run-length path.
+// It uses coherent (blocky) images so the probe enables the run-length
+// short-circuit, then asserts bit-for-bit identical output, indices, and
+// usage versus the per-pixel serial reference. Run under -race too.
+func TestRunLengthMatchesSerial(t *testing.T) {
+	palSizes := []int{16, 128, 256} // linear and kd regimes
+	dists := []struct {
+		name string
+		fn   DistanceFunc
+	}{
+		{"stdlib", nil},
+		{"euclidean", EuclideanRGBA},
+	}
+	for _, opaque := range []bool{true, false} {
+		for _, n := range palSizes {
+			for _, d := range dists {
+				img := blockyImage(300, 300, 7, 3, opaque)
+				if got := coherenceProbe(img, runLengthProbeSamples); got < runLengthMinCoherence {
+					t.Fatalf("blocky image probe %.3f < %.3f: run-length path would not engage", got, runLengthMinCoherence)
+				}
+				pal := testPalette(n, 2)
+				name := d.name
+				if !opaque {
+					name += "/alpha"
+				}
+
+				wantImg, wantIdx, wantUsage := serialNearest(pal, img, d.fn)
+				got, err := pal.applyNearest(context.Background(), img, d.fn)
+				if err != nil {
+					t.Fatalf("P=%d %s: applyNearest: %v", n, name, err)
+				}
+				if !bytesEqual(got.Image.Pix, wantImg.Pix) {
+					t.Fatalf("P=%d %s: image pixels differ from serial", n, name)
+				}
+				for x := range wantIdx {
+					for y := range wantIdx[x] {
+						if got.Indices[x][y] != wantIdx[x][y] {
+							t.Fatalf("P=%d %s: index[%d][%d]=%d want %d", n, name, x, y, got.Indices[x][y], wantIdx[x][y])
+						}
+					}
+				}
+				if len(got.Usage) != len(wantUsage) {
+					t.Fatalf("P=%d %s: usage size %d want %d", n, name, len(got.Usage), len(wantUsage))
+				}
+				for idx, n2 := range wantUsage {
+					if got.Usage[idx] != n2 {
+						t.Fatalf("P=%d %s: usage[%d]=%d want %d", n, name, idx, got.Usage[idx], n2)
+					}
+				}
+			}
+		}
+	}
+}
+
 func bytesEqual(a, b []uint8) bool {
 	if len(a) != len(b) {
 		return false

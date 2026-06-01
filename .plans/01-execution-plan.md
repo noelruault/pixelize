@@ -1,5 +1,26 @@
 # 01 — Execution Plan: Hybrid Nearest-Color Matcher for pixelize
 
+> **STATUS — FULLY EXECUTED (all three phases complete).** This plan has been
+> carried out and shipped; it is retained as the design record, not as open work.
+> What landed, against the live code:
+> - **Phase 1 (done):** parallel exact linear scan for small P + exact kd-tree for
+>   large P (both bit-identical to the `color.Palette.Index` oracle), the opt-in
+>   6-bit Fast LUT, and the `bench/compare.sh` harness with the IM-isolated
+>   comparison. See `palette.go`, `bench/`, and research reports 08/09.
+> - **Phase 2 (closed):** the boundary-aware exact LUT was prototyped and
+>   **rejected on measurement** (report 06/07); exact kd remains the large-P path.
+> - **Phase 3 (done):** the regime selector is live as a hoisted dispatch in
+>   `applyNearest` (§4.1); the §4.2 enhancement candidates (Hamerly, Morton,
+>   SoA/AVX2) were measured and **rejected** (report 12), and the bit-identical
+>   opaque alpha-drop shipped instead.
+>
+> The §6 open questions are resolved (incl. #6 alpha/non-opaque — handled: opaque
+> uses the alpha-dropped scan, non-opaque keeps the 4-channel scan, both exact;
+> #1 boundary LUT and #9 SIMD — both rejected on data). pixelize is now measured
+> **faster than ImageMagick on every benchmark cell while staying exact** (see
+> `bench/history/`). The forward-tense "start here / build first" wording below is
+> preserved as the original plan; read it as history.
+
 **Companion to** `00-overview.md` (read it first for the evidence and verdicts).
 This plan is **actionable**: someone can pick up Phase 1 and start without
 rerunning the research. It is **planning only** — it changes no pixelize source.
@@ -240,6 +261,11 @@ path is tens-of-ms at 8K with documented, test-enforced accuracy bounds; benchma
 harness exists and includes the IM-remap-isolated comparison (which now reproduces
 report 04's IM remap-only figures: 0.41 / 4.78 / 14.99 / 49.95 s at 512/2K/4K/8K).
 
+**STATUS — MET.** Parallel-linear + exact kd both shipped and bit-exact (guarded by
+`TestParallelMatchesSerial`); the 6-bit Fast LUT shipped behind `-lut`/`-lookup-table`
+(`TestFastLUTAccuracy`); `bench/compare.sh` + `bench/history/` are in place. Reports
+08 (scan) and 09 (kd) record the measurements.
+
 ---
 
 ## 3. Phase 2 — Put-it-into-practice experiments (the remaining high-upside bet)
@@ -300,6 +326,10 @@ grid resolution, and meaningfully faster than the Phase-1 exact kd at large P / 
 or (b) rejected with the measured boundary-fraction documented, leaving exact kd as
 the shipped large-P-exact path. Either way the make-or-break boundary number is now
 measured, not assumed.
+
+**STATUS — MET (outcome (b): rejected).** The boundary-aware exact LUT was prototyped
+and measured (reports 06/07); the boundary fraction did not justify it, so it was
+**not shipped**. Exact kd remains the large-P-exact path.
 
 ---
 
@@ -407,15 +437,15 @@ and the Fast/LUT accuracy budget (`TestFastLUTAccuracy`). Matcher microbenchmark
 
 | # | Risk / open question | How to resolve (what to measure) | Phase |
 |---|----------------------|----------------------------------|-------|
-| 1 | **Boundary-cell fraction** of the exact LUT may be large on dense/random palettes, killing its speed advantage. | Measure boundary-cell *and boundary-pixel* fraction across P and grid resolution, random vs tuned palettes (§3.1). | 2 |
+| 1 | **Boundary-cell fraction** of the exact LUT may be large on dense/random palettes, killing its speed advantage. **RESOLVED — rejected:** measured (reports 06/07), did not justify shipping; exact kd is the large-P path. | Measure boundary-cell *and boundary-pixel* fraction across P and grid resolution, random vs tuned palettes (§3.1). | 2 |
 | 2 | **Exact kd crossover** (P where kd beats parallel-linear) — report 04 measured it near P ≈ 64–256 (P=16 favors linear; P≥64 favors kd, scaling far better at 8K). RESOLVED in principle; just re-pin on an idle box. | P-sweep at 2K and 8K on an idle box; bake the constant into `selectMatcher`. | 1 |
 | 3 | **Parallel scaling curve** is unmeasured cleanly (research sweep was contended, showed only ~1.3–1.5×; matrix implies ~3.5× on 4 cores). | Re-run GOMAXPROCS=1..N sweep on an **idle** box. | 1 |
 | 4 | **IM-remap-isolated time** — **RESOLVED by report 04**: PPM full-minus-identity baseline gives IM remap-only 0.41 / 4.78 / 14.99 / 49.95 s at 512/2K/4K/8K, and IM is ~22% non-nearest at P=64/256. Re-confirm on an idle box and keep as the standing IM comparison. | Already measured (rpt04 §3, §4, §6); reproduce via `bench/compare.sh im`. | 1 |
 | 5 | **Accuracy on tuned vs random palettes** — report 03 used random (pessimistic); real palettes do better, but by how much? | Re-measure LUT accuracy on representative tuned palettes (e.g. brand/LEGO ramps). | 1–2 |
-| 6 | **Alpha / non-opaque inputs** — research assumed opaque RGB; stdlib metric is 4D RGBA. | Verify exactness with the alpha term included; ensure LUT/grid key handles alpha or documents opaque-only. | 1 |
+| 6 | **Alpha / non-opaque inputs** — research assumed opaque RGB; stdlib metric is 4D RGBA. **RESOLVED:** opaque sources use the alpha-dropped 3-channel scan (bit-identical, report 12); non-opaque keeps the full 4-channel `indexRaw`; both verified exact by `TestParallelMatchesSerial` across opacities. | Verify exactness with the alpha term included; ensure LUT/grid key handles alpha or documents opaque-only. | 1 |
 | 7 | **kd vs cell-grid** for the large-P-exact slot — **largely RESOLVED:** report 04 proved exact kd bit-exact and fast, so kd is the incumbent. Cell-grid is only a contingency if kd integration proves awkward in production. | If kd is awkward in prod, head-to-head cell-grid vs kd at large P / 8K; ship only the winner. | 1–2 |
 | 8 | **`/tmp` prototypes could be lost on a container reset** (currently present). | Challenger is recoverable verbatim from `04-…-data.txt` (and `bench/compare.sh` auto-rebuilds it); quantlab would need reconstruction from report 03 §3, or just reuse challenger. | 1 |
-| 9 | **Go has weak auto-vectorization**; SIMD needs asm/`avo` (not pure-source Go). | Only pursue SIMD if scan paths prove compute-bound; keep behind build tag with pure-Go fallback. | 3 |
+| 9 | **Go has weak auto-vectorization**; SIMD needs asm/`avo` (not pure-source Go). **RESOLVED — not pursued:** report 12 measured the scan paths and rejected SIMD/AVX2 (large-P is owned by kd; small-P linear is cheap; asm + build tag not repaid). | Only pursue SIMD if scan paths prove compute-bound; keep behind build tag with pure-Go fallback. | 3 |
 
 ---
 

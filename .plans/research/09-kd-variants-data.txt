@@ -1,0 +1,1008 @@
+==================================================================
+eval-kd RAW DATA
+Host: 4 logical CPUs, go version go1.24.7 linux/amd64
+Date: 2026-06-01
+Images: starry night (van Gogh) upscaled via ImageMagick convert -resize WxH!
+Palettes: deterministic xorshift makePalette(n) (matches challenger generator)
+==================================================================
+
+### ORACLE VALIDATION: oracleIndex vs real color.Palette.Index ###
+ORACLE-CHECK P=16 checked=340608 mismatches_vs_stdlib=0
+ORACLE-CHECK P=32 checked=340608 mismatches_vs_stdlib=0
+ORACLE-CHECK P=64 checked=340608 mismatches_vs_stdlib=0
+ORACLE-CHECK P=128 checked=340608 mismatches_vs_stdlib=0
+ORACLE-CHECK P=256 checked=340608 mismatches_vs_stdlib=0
+
+### ADVERSARIAL TIE TESTS ###
+ADVERSARIAL fixed cases:
+  case=midpoint-2way    queries=4 baseline_indexDiff=1 (all build variants bit-ident=true)
+  case=duplicate-entries queries=3 baseline_indexDiff=3 (all build variants bit-ident=true)
+  case=symmetric-cube   queries=4 baseline_indexDiff=4 (all build variants bit-ident=true)
+  case=cross-split-tie  queries=4 baseline_indexDiff=1 (all build variants bit-ident=true)
+ADVERSARIAL fuzz: total=40000 baseline_mismatch=9054 bitidentical_mismatch=0
+ADVERSARIAL RESULT: bit-identical kd matches stdlib on ALL tie cases.
+
+### EXACTNESS + BIT-IDENTICAL GATE (vs stdlib oracle) ###
+# nonNearest must be 0 (exact); indexDiff must be 0 (bit-identical)
+
+-- real painting: starry 512x512 --
+GATE img=starry_512x512.ppm P=16 N=262144
+  oracle(=stdlib)      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  parallel-linear      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-baseline          nonNearest=0 indexDiff=178  -> exact-but-NOT-bit-identical
+  kd-bitidentical      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-bitident-stack    nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+GATE img=starry_512x512.ppm P=64 N=262144
+  oracle(=stdlib)      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  parallel-linear      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-baseline          nonNearest=0 indexDiff=248  -> exact-but-NOT-bit-identical
+  kd-bitidentical      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-bitident-stack    nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+GATE img=starry_512x512.ppm P=256 N=262144
+  oracle(=stdlib)      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  parallel-linear      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-baseline          nonNearest=0 indexDiff=283  -> exact-but-NOT-bit-identical
+  kd-bitidentical      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-bitident-stack    nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+
+-- noise 512x512 --
+GATE img=noise_512.ppm P=16 N=262144
+  oracle(=stdlib)      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  parallel-linear      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-baseline          nonNearest=0 indexDiff=60  -> exact-but-NOT-bit-identical
+  kd-bitidentical      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-bitident-stack    nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+GATE img=noise_512.ppm P=64 N=262144
+  oracle(=stdlib)      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  parallel-linear      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-baseline          nonNearest=0 indexDiff=131  -> exact-but-NOT-bit-identical
+  kd-bitidentical      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-bitident-stack    nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+GATE img=noise_512.ppm P=256 N=262144
+  oracle(=stdlib)      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  parallel-linear      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-baseline          nonNearest=0 indexDiff=292  -> exact-but-NOT-bit-identical
+  kd-bitidentical      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-bitident-stack    nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+
+### GATE UNDER RACE DETECTOR (winner) ###
+GATE img=starry_512x512.ppm P=256 N=262144
+  oracle(=stdlib)      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  parallel-linear      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-baseline          nonNearest=0 indexDiff=283  -> exact-but-NOT-bit-identical
+  kd-bitidentical      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-bitident-stack    nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+GATE img=noise_512.ppm P=64 N=262144
+  oracle(=stdlib)      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  parallel-linear      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-baseline          nonNearest=0 indexDiff=131  -> exact-but-NOT-bit-identical
+  kd-bitidentical      nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+  kd-bitident-stack    nonNearest=0 indexDiff=0  -> BIT-IDENTICAL
+(no DATA RACE reported above => race-free)
+
+### BUILD-SHAPE VARIANTS (all bit-identical; speed only) ###
+# split: median (balanced) vs midpoint (box-mid); axis: cycle (depth%3) vs widest-spread
+BUILDVAR img=512x512 P=16 split=median   axis=cycle  build_ms=0.011 remap_ms=18.776 Mpix/s=14.0
+BUILDVAR img=512x512 P=16 split=median   axis=widest build_ms=0.021 remap_ms=11.837 Mpix/s=22.1
+BUILDVAR img=512x512 P=16 split=midpoint axis=cycle  build_ms=0.011 remap_ms=13.254 Mpix/s=19.8
+BUILDVAR img=512x512 P=16 split=midpoint axis=widest build_ms=0.012 remap_ms=16.462 Mpix/s=15.9
+BUILDVAR img=512x512 P=64 split=median   axis=cycle  build_ms=0.037 remap_ms=30.079 Mpix/s=8.7
+BUILDVAR img=512x512 P=64 split=median   axis=widest build_ms=0.044 remap_ms=32.896 Mpix/s=8.0
+BUILDVAR img=512x512 P=64 split=midpoint axis=cycle  build_ms=0.067 remap_ms=30.106 Mpix/s=8.7
+BUILDVAR img=512x512 P=64 split=midpoint axis=widest build_ms=0.052 remap_ms=28.856 Mpix/s=9.1
+BUILDVAR img=512x512 P=256 split=median   axis=cycle  build_ms=0.226 remap_ms=41.369 Mpix/s=6.3
+BUILDVAR img=512x512 P=256 split=median   axis=widest build_ms=0.210 remap_ms=36.837 Mpix/s=7.1
+BUILDVAR img=512x512 P=256 split=midpoint axis=cycle  build_ms=0.241 remap_ms=44.788 Mpix/s=5.9
+BUILDVAR img=512x512 P=256 split=midpoint axis=widest build_ms=0.209 remap_ms=38.476 Mpix/s=6.8
+BUILDVAR img=2048x2048 P=64 split=median   axis=cycle  build_ms=0.261 remap_ms=391.559 Mpix/s=10.7
+BUILDVAR img=2048x2048 P=64 split=median   axis=widest build_ms=0.041 remap_ms=369.269 Mpix/s=11.4
+BUILDVAR img=2048x2048 P=64 split=midpoint axis=cycle  build_ms=0.054 remap_ms=397.552 Mpix/s=10.6
+BUILDVAR img=2048x2048 P=64 split=midpoint axis=widest build_ms=0.044 remap_ms=461.226 Mpix/s=9.1
+BUILDVAR img=2048x2048 P=256 split=median   axis=cycle  build_ms=10.150 remap_ms=602.045 Mpix/s=7.0
+BUILDVAR img=2048x2048 P=256 split=median   axis=widest build_ms=0.242 remap_ms=603.262 Mpix/s=7.0
+BUILDVAR img=2048x2048 P=256 split=midpoint axis=cycle  build_ms=0.197 remap_ms=609.399 Mpix/s=6.9
+BUILDVAR img=2048x2048 P=256 split=midpoint axis=widest build_ms=3.259 remap_ms=642.531 Mpix/s=6.5
+
+### BENCHMARK MATRIX: variant x P x size ###
+# methods: parallel-linear(BAR), kd-bitident-rec(SHIP candidate), kd-bitident-stack, kd-baseline-rec
+# remap_ms = best-of-N reps; build_ms negligible; heap dominated by image+output buffers
+
+--- 512x512 (N=262144) reps=7 ---
+BENCH img=512x512 P=16 method=parallel-linear    build_ms=0.000 remap_ms=4.819 Mpix/s=54.4 allocs/run=19 heapMiB=2
+BENCH img=512x512 P=16 method=kd-bitident-rec    build_ms=0.013 remap_ms=12.966 Mpix/s=20.2 allocs/run=18 heapMiB=2
+BENCH img=512x512 P=16 method=kd-bitident-stack  build_ms=0.012 remap_ms=16.108 Mpix/s=16.3 allocs/run=21 heapMiB=2
+BENCH img=512x512 P=16 method=kd-baseline-rec    build_ms=0.012 remap_ms=9.944 Mpix/s=26.4 allocs/run=17 heapMiB=2
+BENCH img=512x512 P=32 method=parallel-linear    build_ms=0.000 remap_ms=14.869 Mpix/s=17.6 allocs/run=19 heapMiB=2
+BENCH img=512x512 P=32 method=kd-bitident-rec    build_ms=0.020 remap_ms=22.207 Mpix/s=11.8 allocs/run=17 heapMiB=2
+BENCH img=512x512 P=32 method=kd-bitident-stack  build_ms=0.026 remap_ms=26.073 Mpix/s=10.1 allocs/run=21 heapMiB=2
+BENCH img=512x512 P=32 method=kd-baseline-rec    build_ms=0.026 remap_ms=20.047 Mpix/s=13.1 allocs/run=17 heapMiB=2
+BENCH img=512x512 P=48 method=parallel-linear    build_ms=0.000 remap_ms=14.923 Mpix/s=17.6 allocs/run=19 heapMiB=2
+BENCH img=512x512 P=48 method=kd-bitident-rec    build_ms=0.030 remap_ms=20.310 Mpix/s=12.9 allocs/run=18 heapMiB=2
+BENCH img=512x512 P=48 method=kd-bitident-stack  build_ms=0.060 remap_ms=25.112 Mpix/s=10.4 allocs/run=23 heapMiB=2
+BENCH img=512x512 P=48 method=kd-baseline-rec    build_ms=0.027 remap_ms=18.538 Mpix/s=14.1 allocs/run=17 heapMiB=2
+BENCH img=512x512 P=64 method=parallel-linear    build_ms=0.000 remap_ms=23.627 Mpix/s=11.1 allocs/run=19 heapMiB=2
+BENCH img=512x512 P=64 method=kd-bitident-rec    build_ms=0.039 remap_ms=24.715 Mpix/s=10.6 allocs/run=17 heapMiB=2
+BENCH img=512x512 P=64 method=kd-bitident-stack  build_ms=0.053 remap_ms=24.933 Mpix/s=10.5 allocs/run=21 heapMiB=2
+BENCH img=512x512 P=64 method=kd-baseline-rec    build_ms=0.039 remap_ms=20.912 Mpix/s=12.5 allocs/run=17 heapMiB=2
+BENCH img=512x512 P=96 method=parallel-linear    build_ms=0.000 remap_ms=29.415 Mpix/s=8.9 allocs/run=19 heapMiB=2
+BENCH img=512x512 P=96 method=kd-bitident-rec    build_ms=0.056 remap_ms=30.419 Mpix/s=8.6 allocs/run=17 heapMiB=2
+BENCH img=512x512 P=96 method=kd-bitident-stack  build_ms=0.067 remap_ms=42.486 Mpix/s=6.2 allocs/run=21 heapMiB=2
+BENCH img=512x512 P=96 method=kd-baseline-rec    build_ms=0.060 remap_ms=32.064 Mpix/s=8.2 allocs/run=17 heapMiB=2
+BENCH img=512x512 P=128 method=parallel-linear    build_ms=0.000 remap_ms=40.803 Mpix/s=6.4 allocs/run=18 heapMiB=2
+BENCH img=512x512 P=128 method=kd-bitident-rec    build_ms=0.090 remap_ms=36.032 Mpix/s=7.3 allocs/run=19 heapMiB=2
+BENCH img=512x512 P=128 method=kd-bitident-stack  build_ms=0.081 remap_ms=46.131 Mpix/s=5.7 allocs/run=21 heapMiB=2
+BENCH img=512x512 P=128 method=kd-baseline-rec    build_ms=0.090 remap_ms=34.804 Mpix/s=7.5 allocs/run=17 heapMiB=2
+BENCH img=512x512 P=256 method=parallel-linear    build_ms=0.000 remap_ms=86.077 Mpix/s=3.0 allocs/run=19 heapMiB=2
+BENCH img=512x512 P=256 method=kd-bitident-rec    build_ms=0.213 remap_ms=39.004 Mpix/s=6.7 allocs/run=18 heapMiB=2
+BENCH img=512x512 P=256 method=kd-bitident-stack  build_ms=0.182 remap_ms=43.341 Mpix/s=6.0 allocs/run=21 heapMiB=2
+BENCH img=512x512 P=256 method=kd-baseline-rec    build_ms=0.228 remap_ms=31.253 Mpix/s=8.4 allocs/run=17 heapMiB=2
+
+--- 2048x2048 (N=4194304) reps=5 ---
+BENCH img=2048x2048 P=16 method=parallel-linear    build_ms=0.000 remap_ms=105.134 Mpix/s=39.9 allocs/run=20 heapMiB=28
+BENCH img=2048x2048 P=16 method=kd-bitident-rec    build_ms=0.012 remap_ms=215.202 Mpix/s=19.5 allocs/run=17 heapMiB=28
+BENCH img=2048x2048 P=16 method=kd-bitident-stack  build_ms=0.056 remap_ms=237.709 Mpix/s=17.6 allocs/run=22 heapMiB=28
+BENCH img=2048x2048 P=16 method=kd-baseline-rec    build_ms=0.013 remap_ms=203.927 Mpix/s=20.6 allocs/run=18 heapMiB=28
+BENCH img=2048x2048 P=32 method=parallel-linear    build_ms=0.000 remap_ms=170.393 Mpix/s=24.6 allocs/run=19 heapMiB=28
+BENCH img=2048x2048 P=32 method=kd-bitident-rec    build_ms=0.024 remap_ms=224.616 Mpix/s=18.7 allocs/run=17 heapMiB=28
+BENCH img=2048x2048 P=32 method=kd-bitident-stack  build_ms=0.026 remap_ms=253.737 Mpix/s=16.5 allocs/run=22 heapMiB=28
+BENCH img=2048x2048 P=32 method=kd-baseline-rec    build_ms=0.022 remap_ms=202.429 Mpix/s=20.7 allocs/run=17 heapMiB=28
+BENCH img=2048x2048 P=48 method=parallel-linear    build_ms=0.000 remap_ms=131.568 Mpix/s=31.9 allocs/run=19 heapMiB=28
+BENCH img=2048x2048 P=48 method=kd-bitident-rec    build_ms=0.028 remap_ms=214.011 Mpix/s=19.6 allocs/run=17 heapMiB=28
+BENCH img=2048x2048 P=48 method=kd-bitident-stack  build_ms=0.071 remap_ms=240.807 Mpix/s=17.4 allocs/run=22 heapMiB=28
+BENCH img=2048x2048 P=48 method=kd-baseline-rec    build_ms=0.027 remap_ms=207.525 Mpix/s=20.2 allocs/run=17 heapMiB=28
+BENCH img=2048x2048 P=64 method=parallel-linear    build_ms=0.000 remap_ms=204.179 Mpix/s=20.5 allocs/run=19 heapMiB=28
+BENCH img=2048x2048 P=64 method=kd-bitident-rec    build_ms=0.040 remap_ms=298.789 Mpix/s=14.0 allocs/run=18 heapMiB=28
+BENCH img=2048x2048 P=64 method=kd-bitident-stack  build_ms=0.036 remap_ms=386.718 Mpix/s=10.8 allocs/run=21 heapMiB=28
+BENCH img=2048x2048 P=64 method=kd-baseline-rec    build_ms=0.039 remap_ms=307.831 Mpix/s=13.6 allocs/run=17 heapMiB=28
+BENCH img=2048x2048 P=96 method=parallel-linear    build_ms=0.000 remap_ms=340.230 Mpix/s=12.3 allocs/run=19 heapMiB=28
+BENCH img=2048x2048 P=96 method=kd-bitident-rec    build_ms=0.053 remap_ms=332.732 Mpix/s=12.6 allocs/run=18 heapMiB=28
+BENCH img=2048x2048 P=96 method=kd-bitident-stack  build_ms=0.066 remap_ms=463.760 Mpix/s=9.0 allocs/run=21 heapMiB=28
+BENCH img=2048x2048 P=96 method=kd-baseline-rec    build_ms=0.053 remap_ms=324.429 Mpix/s=12.9 allocs/run=17 heapMiB=28
+BENCH img=2048x2048 P=128 method=parallel-linear    build_ms=0.000 remap_ms=419.965 Mpix/s=10.0 allocs/run=19 heapMiB=28
+BENCH img=2048x2048 P=128 method=kd-bitident-rec    build_ms=0.071 remap_ms=323.864 Mpix/s=13.0 allocs/run=17 heapMiB=28
+BENCH img=2048x2048 P=128 method=kd-bitident-stack  build_ms=0.079 remap_ms=356.826 Mpix/s=11.8 allocs/run=21 heapMiB=28
+BENCH img=2048x2048 P=128 method=kd-baseline-rec    build_ms=0.078 remap_ms=357.277 Mpix/s=11.7 allocs/run=17 heapMiB=28
+BENCH img=2048x2048 P=256 method=parallel-linear    build_ms=0.000 remap_ms=832.563 Mpix/s=5.0 allocs/run=19 heapMiB=28
+BENCH img=2048x2048 P=256 method=kd-bitident-rec    build_ms=0.179 remap_ms=354.208 Mpix/s=11.8 allocs/run=17 heapMiB=28
+BENCH img=2048x2048 P=256 method=kd-bitident-stack  build_ms=0.168 remap_ms=457.829 Mpix/s=9.2 allocs/run=21 heapMiB=28
+BENCH img=2048x2048 P=256 method=kd-baseline-rec    build_ms=0.171 remap_ms=341.150 Mpix/s=12.3 allocs/run=17 heapMiB=28
+
+--- 3840x2160 (N=8294400) reps=4 ---
+BENCH img=3840x2160 P=16 method=parallel-linear    build_ms=0.000 remap_ms=146.323 Mpix/s=56.7 allocs/run=20 heapMiB=55
+BENCH img=3840x2160 P=16 method=kd-bitident-rec    build_ms=0.015 remap_ms=300.938 Mpix/s=27.6 allocs/run=18 heapMiB=55
+BENCH img=3840x2160 P=16 method=kd-bitident-stack  build_ms=0.013 remap_ms=319.983 Mpix/s=25.9 allocs/run=21 heapMiB=55
+BENCH img=3840x2160 P=16 method=kd-baseline-rec    build_ms=0.015 remap_ms=280.860 Mpix/s=29.5 allocs/run=17 heapMiB=55
+BENCH img=3840x2160 P=32 method=parallel-linear    build_ms=0.000 remap_ms=296.114 Mpix/s=28.0 allocs/run=20 heapMiB=55
+BENCH img=3840x2160 P=32 method=kd-bitident-rec    build_ms=0.024 remap_ms=340.102 Mpix/s=24.4 allocs/run=18 heapMiB=55
+BENCH img=3840x2160 P=32 method=kd-bitident-stack  build_ms=0.019 remap_ms=521.582 Mpix/s=15.9 allocs/run=22 heapMiB=55
+BENCH img=3840x2160 P=32 method=kd-baseline-rec    build_ms=0.049 remap_ms=404.865 Mpix/s=20.5 allocs/run=17 heapMiB=55
+BENCH img=3840x2160 P=48 method=parallel-linear    build_ms=0.000 remap_ms=355.115 Mpix/s=23.4 allocs/run=20 heapMiB=55
+BENCH img=3840x2160 P=48 method=kd-bitident-rec    build_ms=0.030 remap_ms=417.927 Mpix/s=19.8 allocs/run=17 heapMiB=55
+BENCH img=3840x2160 P=48 method=kd-bitident-stack  build_ms=0.033 remap_ms=412.387 Mpix/s=20.1 allocs/run=21 heapMiB=55
+BENCH img=3840x2160 P=48 method=kd-baseline-rec    build_ms=0.029 remap_ms=411.252 Mpix/s=20.2 allocs/run=18 heapMiB=55
+BENCH img=3840x2160 P=64 method=parallel-linear    build_ms=0.000 remap_ms=498.552 Mpix/s=16.6 allocs/run=19 heapMiB=55
+BENCH img=3840x2160 P=64 method=kd-bitident-rec    build_ms=0.036 remap_ms=478.661 Mpix/s=17.3 allocs/run=19 heapMiB=55
+BENCH img=3840x2160 P=64 method=kd-bitident-stack  build_ms=0.089 remap_ms=704.266 Mpix/s=11.8 allocs/run=22 heapMiB=55
+BENCH img=3840x2160 P=64 method=kd-baseline-rec    build_ms=0.038 remap_ms=557.475 Mpix/s=14.9 allocs/run=17 heapMiB=55
+BENCH img=3840x2160 P=96 method=parallel-linear    build_ms=0.000 remap_ms=624.661 Mpix/s=13.3 allocs/run=19 heapMiB=55
+BENCH img=3840x2160 P=96 method=kd-bitident-rec    build_ms=0.055 remap_ms=715.077 Mpix/s=11.6 allocs/run=19 heapMiB=55
+BENCH img=3840x2160 P=96 method=kd-bitident-stack  build_ms=0.066 remap_ms=674.584 Mpix/s=12.3 allocs/run=21 heapMiB=55
+BENCH img=3840x2160 P=96 method=kd-baseline-rec    build_ms=0.054 remap_ms=643.948 Mpix/s=12.9 allocs/run=17 heapMiB=55
+BENCH img=3840x2160 P=128 method=parallel-linear    build_ms=0.000 remap_ms=912.288 Mpix/s=9.1 allocs/run=19 heapMiB=55
+BENCH img=3840x2160 P=128 method=kd-bitident-rec    build_ms=0.077 remap_ms=541.993 Mpix/s=15.3 allocs/run=18 heapMiB=55
+BENCH img=3840x2160 P=128 method=kd-bitident-stack  build_ms=0.096 remap_ms=780.005 Mpix/s=10.6 allocs/run=21 heapMiB=55
+BENCH img=3840x2160 P=128 method=kd-baseline-rec    build_ms=0.079 remap_ms=686.547 Mpix/s=12.1 allocs/run=17 heapMiB=55
+BENCH img=3840x2160 P=256 method=parallel-linear    build_ms=0.000 remap_ms=1740.901 Mpix/s=4.8 allocs/run=18 heapMiB=55
+BENCH img=3840x2160 P=256 method=kd-bitident-rec    build_ms=0.191 remap_ms=680.697 Mpix/s=12.2 allocs/run=18 heapMiB=55
+BENCH img=3840x2160 P=256 method=kd-bitident-stack  build_ms=0.187 remap_ms=850.571 Mpix/s=9.8 allocs/run=21 heapMiB=55
+BENCH img=3840x2160 P=256 method=kd-baseline-rec    build_ms=0.169 remap_ms=694.729 Mpix/s=11.9 allocs/run=17 heapMiB=55
+
+--- 7680x4320 (N=33177600) reps=3 ---
+BENCH img=7680x4320 P=16 method=parallel-linear    build_ms=0.000 remap_ms=618.675 Mpix/s=53.6 allocs/run=19 heapMiB=222
+BENCH img=7680x4320 P=16 method=kd-bitident-rec    build_ms=0.012 remap_ms=1133.283 Mpix/s=29.3 allocs/run=18 heapMiB=222
+BENCH img=7680x4320 P=16 method=kd-bitident-stack  build_ms=0.022 remap_ms=1286.992 Mpix/s=25.8 allocs/run=24 heapMiB=222
+BENCH img=7680x4320 P=16 method=kd-baseline-rec    build_ms=0.018 remap_ms=1174.110 Mpix/s=28.3 allocs/run=19 heapMiB=222
+BENCH img=7680x4320 P=32 method=parallel-linear    build_ms=0.000 remap_ms=1087.076 Mpix/s=30.5 allocs/run=19 heapMiB=222
+BENCH img=7680x4320 P=32 method=kd-bitident-rec    build_ms=0.018 remap_ms=1569.107 Mpix/s=21.1 allocs/run=19 heapMiB=222
+BENCH img=7680x4320 P=32 method=kd-bitident-stack  build_ms=0.023 remap_ms=1807.412 Mpix/s=18.4 allocs/run=22 heapMiB=222
+BENCH img=7680x4320 P=32 method=kd-baseline-rec    build_ms=0.019 remap_ms=1556.770 Mpix/s=21.3 allocs/run=19 heapMiB=222
+BENCH img=7680x4320 P=48 method=parallel-linear    build_ms=0.000 remap_ms=1380.360 Mpix/s=24.0 allocs/run=20 heapMiB=222
+BENCH img=7680x4320 P=48 method=kd-bitident-rec    build_ms=0.027 remap_ms=1498.372 Mpix/s=22.1 allocs/run=19 heapMiB=222
+BENCH img=7680x4320 P=48 method=kd-bitident-stack  build_ms=0.065 remap_ms=1789.758 Mpix/s=18.5 allocs/run=22 heapMiB=222
+BENCH img=7680x4320 P=48 method=kd-baseline-rec    build_ms=0.032 remap_ms=1552.083 Mpix/s=21.4 allocs/run=17 heapMiB=222
+BENCH img=7680x4320 P=64 method=parallel-linear    build_ms=0.000 remap_ms=1857.103 Mpix/s=17.9 allocs/run=19 heapMiB=222
+BENCH img=7680x4320 P=64 method=kd-bitident-rec    build_ms=0.034 remap_ms=2257.501 Mpix/s=14.7 allocs/run=19 heapMiB=222
+BENCH img=7680x4320 P=64 method=kd-bitident-stack  build_ms=0.039 remap_ms=2808.194 Mpix/s=11.8 allocs/run=22 heapMiB=222
+BENCH img=7680x4320 P=64 method=kd-baseline-rec    build_ms=0.038 remap_ms=2165.314 Mpix/s=15.3 allocs/run=18 heapMiB=222
+BENCH img=7680x4320 P=96 method=parallel-linear    build_ms=0.000 remap_ms=2689.404 Mpix/s=12.3 allocs/run=19 heapMiB=222
+BENCH img=7680x4320 P=96 method=kd-bitident-rec    build_ms=0.060 remap_ms=2546.035 Mpix/s=13.0 allocs/run=18 heapMiB=222
+BENCH img=7680x4320 P=96 method=kd-bitident-stack  build_ms=0.061 remap_ms=3104.834 Mpix/s=10.7 allocs/run=22 heapMiB=222
+BENCH img=7680x4320 P=96 method=kd-baseline-rec    build_ms=0.054 remap_ms=2570.866 Mpix/s=12.9 allocs/run=18 heapMiB=222
+BENCH img=7680x4320 P=128 method=parallel-linear    build_ms=0.000 remap_ms=3446.209 Mpix/s=9.6 allocs/run=19 heapMiB=222
+BENCH img=7680x4320 P=128 method=kd-bitident-rec    build_ms=0.073 remap_ms=2491.625 Mpix/s=13.3 allocs/run=18 heapMiB=222
+BENCH img=7680x4320 P=128 method=kd-bitident-stack  build_ms=0.075 remap_ms=3599.275 Mpix/s=9.2 allocs/run=21 heapMiB=222
+BENCH img=7680x4320 P=128 method=kd-baseline-rec    build_ms=0.072 remap_ms=3281.565 Mpix/s=10.1 allocs/run=17 heapMiB=222
+BENCH img=7680x4320 P=256 method=parallel-linear    build_ms=0.000 remap_ms=8910.774 Mpix/s=3.7 allocs/run=19 heapMiB=222
+BENCH img=7680x4320 P=256 method=kd-bitident-rec    build_ms=0.200 remap_ms=4034.513 Mpix/s=8.2 allocs/run=18 heapMiB=222
+BENCH img=7680x4320 P=256 method=kd-bitident-stack  build_ms=0.179 remap_ms=3321.140 Mpix/s=10.0 allocs/run=22 heapMiB=222
+BENCH img=7680x4320 P=256 method=kd-baseline-rec    build_ms=0.209 remap_ms=3788.387 Mpix/s=8.8 allocs/run=17 heapMiB=222
+
+==================================================================
+### FULL GO SOURCE (eval-kd/main.go) ###
+==================================================================
+// eval-kd: exact kd-tree variants vs Go color.Palette.Index for large-palette
+// nearest-color matching. Stdlib only. Go 1.24.
+//
+// Central question: can a kd-tree be made BIT-IDENTICAL to color.Palette.Index
+// (lowest-index tie-break) without losing speed, and where does it beat the
+// parallel-linear scan?
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"image/color"
+	"math/rand"
+	"os"
+	"runtime"
+	"sort"
+	"sync"
+	"time"
+)
+
+// ----------------------------------------------------------------------------
+// infra
+// ----------------------------------------------------------------------------
+
+func nowNs() int64 { return time.Now().UnixNano() }
+
+type Image struct {
+	W, H int
+	Pix  []byte // RGB, 3 bytes/pixel
+}
+
+func (im *Image) N() int { return im.W * im.H }
+
+func readPPM(path string) (*Image, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	r := bufio.NewReaderSize(f, 1<<20)
+	var magic string
+	fmt.Fscan(r, &magic)
+	if magic != "P6" {
+		return nil, fmt.Errorf("not P6: %s", magic)
+	}
+	var w, h, maxv int
+	fmt.Fscan(r, &w, &h, &maxv)
+	r.ReadByte()
+	pix := make([]byte, w*h*3)
+	n := 0
+	for n < len(pix) {
+		m, e := r.Read(pix[n:])
+		n += m
+		if e != nil {
+			if n == len(pix) {
+				break
+			}
+			return nil, e
+		}
+	}
+	return &Image{W: w, H: h, Pix: pix}, nil
+}
+
+type Color struct{ R, G, B uint8 }
+
+// makePalette: deterministic pseudo-random palette (xorshift), matches the
+// challenger generator so palettes are comparable across studies.
+func makePalette(n int) []Color {
+	var s uint64 = 0x9E3779B97F4A7C15
+	next := func() uint64 {
+		s ^= s << 13
+		s ^= s >> 7
+		s ^= s << 17
+		return s
+	}
+	p := make([]Color, n)
+	for i := range p {
+		p[i] = Color{uint8(next()), uint8(next()), uint8(next())}
+	}
+	return p
+}
+
+func toColorPalette(pal []Color) color.Palette {
+	cp := make(color.Palette, len(pal))
+	for i, c := range pal {
+		cp[i] = color.RGBA{c.R, c.G, c.B, 0xff}
+	}
+	return cp
+}
+
+func dist8(c Color, r, g, b uint8) int32 {
+	dr := int32(r) - int32(c.R)
+	dg := int32(g) - int32(c.G)
+	db := int32(b) - int32(c.B)
+	return dr*dr + dg*dg + db*db
+}
+
+// ----------------------------------------------------------------------------
+// ORACLE: exact reproduction of Go stdlib color.Palette.Index semantics for
+// opaque 8-bit colors. argmin squared distance, lowest-index tie-break.
+// We verify this against the REAL color.Palette.Index below.
+// ----------------------------------------------------------------------------
+
+func oracleIndex(pal []Color, r, g, b uint8) int {
+	best := 0
+	bestD := dist8(pal[0], r, g, b)
+	for i := 1; i < len(pal); i++ {
+		d := dist8(pal[i], r, g, b)
+		if d < bestD { // strict < => first (lowest) index wins ties
+			bestD = d
+			best = i
+		}
+	}
+	return best
+}
+
+// ----------------------------------------------------------------------------
+// VARIANT: parallel-linear bit-identical scan (THE BAR).
+// Same logic as oracleIndex, run row-band parallel.
+// ----------------------------------------------------------------------------
+
+type linearMatcher struct{ pal []Color }
+
+func (m *linearMatcher) match(r, g, b uint8) int { return oracleIndex(m.pal, r, g, b) }
+
+// ----------------------------------------------------------------------------
+// kd-tree variants.
+//
+// Build options:
+//   split:  "median" (balanced, sort+median) or "midpoint" (split at box mid)
+//   axis:   "cycle"  (depth%3)               or "widest"  (max-spread axis)
+//
+// Query options:
+//   tieBreak: false => baseline (strict <, traversal-order tie)
+//             true  => bit-identical (<=dist with lower-index wins)
+//   mode:     "rec"   recursion
+//             "stack" explicit stack
+//   storeColor: node stores color (cache-local) vs index into pal array
+// ----------------------------------------------------------------------------
+
+type kdNode struct {
+	color       Color
+	idx, axis   int
+	left, right *kdNode
+}
+
+type kdTree struct {
+	root  *kdNode
+	pal   []Color
+	nodes []kdNode // flat backing for index-into-array variant
+}
+
+func axisVal(c Color, axis int) int32 {
+	switch axis {
+	case 0:
+		return int32(c.R)
+	case 1:
+		return int32(c.G)
+	default:
+		return int32(c.B)
+	}
+}
+
+type kdPt struct {
+	c   Color
+	idx int
+}
+
+func widestAxis(items []kdPt) int {
+	var lo, hi [3]int32
+	lo = [3]int32{255, 255, 255}
+	for _, it := range items {
+		v := [3]int32{int32(it.c.R), int32(it.c.G), int32(it.c.B)}
+		for a := 0; a < 3; a++ {
+			if v[a] < lo[a] {
+				lo[a] = v[a]
+			}
+			if v[a] > hi[a] {
+				hi[a] = v[a]
+			}
+		}
+	}
+	best, bestSpread := 0, int32(-1)
+	for a := 0; a < 3; a++ {
+		if s := hi[a] - lo[a]; s > bestSpread {
+			bestSpread = s
+			best = a
+		}
+	}
+	return best
+}
+
+// buildKD constructs a kd-tree.
+//
+// For BOTH median and midpoint splits we choose the split *element* so that
+// the pivot value's partition is deterministic. Crucially, regardless of build
+// shape, the bit-identical search re-derives correctness from geometry + the
+// index tie-break, so build shape only affects SPEED, never the answer.
+func buildKD(pal []Color, split, axisMode string) *kdTree {
+	pts := make([]kdPt, len(pal))
+	for i, c := range pal {
+		pts[i] = kdPt{c, i}
+	}
+	t := &kdTree{pal: pal}
+	t.nodes = make([]kdNode, 0, len(pal))
+
+	var build func(items []kdPt, depth int) *kdNode
+	build = func(items []kdPt, depth int) *kdNode {
+		if len(items) == 0 {
+			return nil
+		}
+		var axis int
+		if axisMode == "widest" {
+			axis = widestAxis(items)
+		} else {
+			axis = depth % 3
+		}
+		sort.Slice(items, func(a, b int) bool {
+			va, vb := axisVal(items[a].c, axis), axisVal(items[b].c, axis)
+			if va != vb {
+				return va < vb
+			}
+			return items[a].idx < items[b].idx // stable on index
+		})
+		var mid int
+		if split == "midpoint" {
+			// split at the box-midpoint value along axis
+			lo := axisVal(items[0].c, axis)
+			hi := axisVal(items[len(items)-1].c, axis)
+			midv := (lo + hi) / 2
+			// first element with value > midv becomes the right side;
+			// pivot is the last element with value <= midv to keep a valid BST.
+			mid = 0
+			for mid < len(items)-1 && axisVal(items[mid+1].c, axis) <= midv {
+				mid++
+			}
+		} else {
+			mid = len(items) / 2
+		}
+		t.nodes = append(t.nodes, kdNode{color: items[mid].c, idx: items[mid].idx, axis: axis})
+		n := &t.nodes[len(t.nodes)-1]
+		n.left = build(items[:mid], depth+1)
+		n.right = build(items[mid+1:], depth+1)
+		return n
+	}
+	t.root = build(pts, 0)
+	return t
+}
+
+// kdSearch: recursion, configurable tie-break.
+type kdSearch struct {
+	tr, tg, tb int32
+	bestD      int32
+	bestIdx    int
+	tieBreak   bool
+}
+
+func (s *kdSearch) search(n *kdNode) {
+	if n == nil {
+		return
+	}
+	dr := s.tr - int32(n.color.R)
+	dg := s.tg - int32(n.color.G)
+	db := s.tb - int32(n.color.B)
+	d := dr*dr + dg*dg + db*db
+	if d < s.bestD || (s.tieBreak && d == s.bestD && n.idx < s.bestIdx) {
+		s.bestD = d
+		s.bestIdx = n.idx
+	}
+	var diff int32
+	switch n.axis {
+	case 0:
+		diff = dr
+	case 1:
+		diff = dg
+	default:
+		diff = db
+	}
+	var near, far *kdNode
+	if diff < 0 {
+		near, far = n.left, n.right
+	} else {
+		near, far = n.right, n.left
+	}
+	s.search(near)
+	// `<=` prune: when the splitting plane is exactly bestD away, the far
+	// side can still contain an EQUIDISTANT point with a smaller palette
+	// index. Visiting it is mandatory for bit-identical tie-breaking.
+	if diff*diff <= s.bestD {
+		s.search(far)
+	}
+}
+
+func (t *kdTree) match(s *kdSearch, r, g, b uint8) int {
+	s.tr, s.tg, s.tb = int32(r), int32(g), int32(b)
+	s.bestD = 1 << 30
+	s.bestIdx = 1 << 30 // large so first node always wins; index tie-break safe
+	s.search(t.root)
+	return s.bestIdx
+}
+
+// kdSearchStack: explicit stack version, bit-identical (tie-break always on).
+type stackFrame struct {
+	n     *kdNode
+	stage int // 0: visit+descend near, 1: maybe descend far
+	diff  int32
+}
+
+type kdSearchStack struct {
+	tr, tg, tb int32
+	bestD      int32
+	bestIdx    int
+	stk        []stackFrame
+}
+
+func (s *kdSearchStack) match(t *kdTree, r, g, b uint8) int {
+	s.tr, s.tg, s.tb = int32(r), int32(g), int32(b)
+	s.bestD = 1 << 30
+	s.bestIdx = 1 << 30
+	if cap(s.stk) == 0 {
+		s.stk = make([]stackFrame, 0, 64)
+	}
+	s.stk = s.stk[:0]
+	cur := t.root
+	for cur != nil || len(s.stk) > 0 {
+		for cur != nil {
+			dr := s.tr - int32(cur.color.R)
+			dg := s.tg - int32(cur.color.G)
+			db := s.tb - int32(cur.color.B)
+			d := dr*dr + dg*dg + db*db
+			if d < s.bestD || (d == s.bestD && cur.idx < s.bestIdx) {
+				s.bestD = d
+				s.bestIdx = cur.idx
+			}
+			var diff int32
+			switch cur.axis {
+			case 0:
+				diff = dr
+			case 1:
+				diff = dg
+			default:
+				diff = db
+			}
+			var near, far *kdNode
+			if diff < 0 {
+				near, far = cur.left, cur.right
+			} else {
+				near, far = cur.right, cur.left
+			}
+			s.stk = append(s.stk, stackFrame{n: cur, diff: diff})
+			_ = far
+			cur = near
+		}
+		// pop: decide far side
+		top := s.stk[len(s.stk)-1]
+		s.stk = s.stk[:len(s.stk)-1]
+		n := top.n
+		var far *kdNode
+		if top.diff < 0 {
+			far = n.right
+		} else {
+			far = n.left
+		}
+		if top.diff*top.diff <= s.bestD {
+			cur = far
+		} else {
+			cur = nil
+		}
+	}
+	return s.bestIdx
+}
+
+// ----------------------------------------------------------------------------
+// row-parallel driver
+// ----------------------------------------------------------------------------
+
+func remapParallel(im *Image, out []int32, newMatch func() func(r, g, b uint8) int) {
+	W, H := im.W, im.H
+	workers := runtime.GOMAXPROCS(0)
+	if workers > H {
+		workers = H
+	}
+	band := (H + workers - 1) / workers
+	var wg sync.WaitGroup
+	for wkr := 0; wkr < workers; wkr++ {
+		y0 := wkr * band
+		if y0 >= H {
+			break
+		}
+		y1 := y0 + band
+		if y1 > H {
+			y1 = H
+		}
+		wg.Add(1)
+		go func(y0, y1 int) {
+			defer wg.Done()
+			match := newMatch()
+			for y := y0; y < y1; y++ {
+				base := y * W
+				pbase := base * 3
+				for x := 0; x < W; x++ {
+					r := im.Pix[pbase]
+					g := im.Pix[pbase+1]
+					b := im.Pix[pbase+2]
+					pbase += 3
+					out[base+x] = int32(match(r, g, b))
+				}
+			}
+		}(y0, y1)
+	}
+	wg.Wait()
+}
+
+// ----------------------------------------------------------------------------
+// commands
+// ----------------------------------------------------------------------------
+
+func atoi(s string) int {
+	n := 0
+	for _, c := range s {
+		n = n*10 + int(c-'0')
+	}
+	return n
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("usage: evalkd <cmd>")
+		return
+	}
+	switch os.Args[1] {
+	case "oracle-check":
+		cmdOracleCheck()
+	case "gate":
+		cmdGate(os.Args[2:])
+	case "adversarial":
+		cmdAdversarial()
+	case "bench":
+		cmdBench(os.Args[2:])
+	case "buildvariants":
+		cmdBuildVariants(os.Args[2:])
+	default:
+		fmt.Println("unknown", os.Args[1])
+	}
+}
+
+// oracle-check: prove our oracleIndex == real color.Palette.Index over a dense
+// sweep of colors and several palette sizes (opaque). This validates the oracle
+// we use everywhere else.
+func cmdOracleCheck() {
+	rng := rand.New(rand.NewSource(1))
+	for _, P := range []int{16, 32, 64, 128, 256} {
+		pal := makePalette(P)
+		cp := toColorPalette(pal)
+		mism := 0
+		checked := 0
+		// dense-ish sweep: step 5 over the 8-bit cube + random samples
+		for r := 0; r < 256; r += 5 {
+			for g := 0; g < 256; g += 5 {
+				for b := 0; b < 256; b += 5 {
+					want := cp.Index(color.RGBA{uint8(r), uint8(g), uint8(b), 0xff})
+					got := oracleIndex(pal, uint8(r), uint8(g), uint8(b))
+					checked++
+					if want != got {
+						mism++
+						if mism <= 3 {
+							fmt.Printf("  MISMATCH P=%d c=(%d,%d,%d) stdlib=%d oracle=%d\n", P, r, g, b, want, got)
+						}
+					}
+				}
+			}
+		}
+		for i := 0; i < 200000; i++ {
+			r, g, b := uint8(rng.Intn(256)), uint8(rng.Intn(256)), uint8(rng.Intn(256))
+			want := cp.Index(color.RGBA{r, g, b, 0xff})
+			got := oracleIndex(pal, r, g, b)
+			checked++
+			if want != got {
+				mism++
+			}
+		}
+		fmt.Printf("ORACLE-CHECK P=%d checked=%d mismatches_vs_stdlib=%d\n", P, checked, mism)
+	}
+}
+
+// gate: run exactness + bit-identical gate for every variant on an image.
+// Reports per variant: (a) non-nearest count, (b) index-differs-from-oracle count.
+func cmdGate(args []string) {
+	imgPath := args[0]
+	P := atoi(args[1])
+	im, err := readPPM(imgPath)
+	if err != nil {
+		fmt.Println("ERR", err)
+		os.Exit(1)
+	}
+	pal := makePalette(P)
+	cp := toColorPalette(pal)
+	N := im.N()
+
+	type variant struct {
+		name  string
+		match func(r, g, b uint8) int
+	}
+	kdBase := buildKD(pal, "median", "cycle")
+	kdBI := buildKD(pal, "median", "cycle")
+	sb := &kdSearch{tieBreak: false}
+	sbi := &kdSearch{tieBreak: true}
+	sStack := &kdSearchStack{}
+	lin := &linearMatcher{pal}
+
+	variants := []variant{
+		{"oracle(=stdlib)", func(r, g, b uint8) int { return oracleIndex(pal, r, g, b) }},
+		{"parallel-linear", lin.match},
+		{"kd-baseline", func(r, g, b uint8) int { return kdBase.match(sb, r, g, b) }},
+		{"kd-bitidentical", func(r, g, b uint8) int { return kdBI.match(sbi, r, g, b) }},
+		{"kd-bitident-stack", func(r, g, b uint8) int { return sStack.match(kdBI, r, g, b) }},
+	}
+
+	fmt.Printf("GATE img=%s P=%d N=%d\n", imgPath, P, N)
+	for _, v := range variants {
+		nonNearest := 0
+		indexDiff := 0
+		for i := 0; i < N; i++ {
+			r, g, b := im.Pix[i*3], im.Pix[i*3+1], im.Pix[i*3+2]
+			oracle := cp.Index(color.RGBA{r, g, b, 0xff})
+			td := dist8(pal[oracle], r, g, b)
+			got := v.match(r, g, b)
+			if dist8(pal[got], r, g, b) > td {
+				nonNearest++
+			}
+			if got != oracle {
+				indexDiff++
+			}
+		}
+		status := "BIT-IDENTICAL"
+		if indexDiff > 0 && nonNearest == 0 {
+			status = "exact-but-NOT-bit-identical"
+		} else if nonNearest > 0 {
+			status = "NOT-EXACT"
+		}
+		fmt.Printf("  %-20s nonNearest=%d indexDiff=%d  -> %s\n", v.name, nonNearest, indexDiff, status)
+	}
+}
+
+// adversarial: construct palettes/queries with exact equidistant ties and
+// verify bit-identical behaviour against stdlib on the hardest cases.
+func cmdAdversarial() {
+	type tcase struct {
+		name string
+		pal  []Color
+		qs   []Color
+	}
+	cases := []tcase{
+		{
+			// pixel exactly between two palette colors; lower index must win
+			name: "midpoint-2way",
+			pal:  []Color{{0, 0, 0}, {10, 0, 0}, {20, 0, 0}},
+			qs:   []Color{{5, 0, 0}, {15, 0, 0}, {0, 0, 0}, {10, 0, 0}},
+		},
+		{
+			// duplicate palette colors -> every query at that color ties; lowest idx
+			name: "duplicate-entries",
+			pal:  []Color{{40, 40, 40}, {40, 40, 40}, {200, 0, 0}, {40, 40, 40}},
+			qs:   []Color{{40, 40, 40}, {41, 40, 40}, {39, 41, 40}},
+		},
+		{
+			// multiple palette entries at equal distance around a query
+			name: "symmetric-cube",
+			pal:  []Color{{0, 0, 0}, {100, 0, 0}, {0, 100, 0}, {0, 0, 100}, {100, 100, 0}, {0, 100, 100}, {100, 0, 100}, {100, 100, 100}},
+			qs:   []Color{{50, 50, 50}, {50, 0, 0}, {50, 50, 0}, {0, 50, 50}},
+		},
+		{
+			// ties where the lower-index winner is NOT the geometrically-near
+			// child of the kd split: forces far-child descent on ties.
+			name: "cross-split-tie",
+			pal:  []Color{{30, 30, 30}, {10, 0, 0}, {50, 0, 0}, {0, 0, 0}, {60, 60, 60}},
+			qs:   []Color{{30, 0, 0}, {30, 30, 0}, {25, 25, 25}, {35, 35, 35}},
+		},
+	}
+
+	// also fuzz: random small palettes with values on a coarse grid (to force
+	// frequent exact ties), random queries on the same grid.
+	rng := rand.New(rand.NewSource(42))
+	grid := func() uint8 { return uint8(rng.Intn(4) * 20) } // {0,20,40,60}
+	fuzzMismBase, fuzzMismBI := 0, 0
+	fuzzTotal := 0
+	for iter := 0; iter < 5000; iter++ {
+		P := 4 + rng.Intn(20)
+		pal := make([]Color, P)
+		for i := range pal {
+			pal[i] = Color{grid(), grid(), grid()}
+		}
+		cp := toColorPalette(pal)
+		kdt := buildKD(pal, "median", "cycle")
+		sb := &kdSearch{tieBreak: false}
+		sbi := &kdSearch{tieBreak: true}
+		for q := 0; q < 8; q++ {
+			qc := Color{grid(), grid(), grid()}
+			oracle := cp.Index(color.RGBA{qc.R, qc.G, qc.B, 0xff})
+			base := kdt.match(sb, qc.R, qc.G, qc.B)
+			bi := kdt.match(sbi, qc.R, qc.G, qc.B)
+			fuzzTotal++
+			if base != oracle {
+				fuzzMismBase++
+			}
+			if bi != oracle {
+				fuzzMismBI++
+			}
+		}
+	}
+
+	fmt.Println("ADVERSARIAL fixed cases:")
+	allBIok := true
+	for _, tc := range cases {
+		cp := toColorPalette(tc.pal)
+		for _, split := range []string{"median", "midpoint"} {
+			for _, axm := range []string{"cycle", "widest"} {
+				kdt := buildKD(tc.pal, split, axm)
+				sb := &kdSearch{tieBreak: false}
+				sbi := &kdSearch{tieBreak: true}
+				ss := &kdSearchStack{}
+				for _, qc := range tc.qs {
+					oracle := cp.Index(color.RGBA{qc.R, qc.G, qc.B, 0xff})
+					base := kdt.match(sb, qc.R, qc.G, qc.B)
+					bi := kdt.match(sbi, qc.R, qc.G, qc.B)
+					st := ss.match(kdt, qc.R, qc.G, qc.B)
+					if bi != oracle || st != oracle {
+						allBIok = false
+						fmt.Printf("  FAIL %s/%s/%s q=%v oracle=%d baseline=%d bitident=%d stack=%d\n",
+							tc.name, split, axm, qc, oracle, base, bi, st)
+					}
+				}
+			}
+		}
+		// show baseline divergence on the canonical median/cycle build
+		kdt := buildKD(tc.pal, "median", "cycle")
+		sb := &kdSearch{tieBreak: false}
+		baseDiff := 0
+		for _, qc := range tc.qs {
+			oracle := cp.Index(color.RGBA{qc.R, qc.G, qc.B, 0xff})
+			if kdt.match(sb, qc.R, qc.G, qc.B) != oracle {
+				baseDiff++
+			}
+		}
+		fmt.Printf("  case=%-16s queries=%d baseline_indexDiff=%d (all build variants bit-ident=%v)\n",
+			tc.name, len(tc.qs), baseDiff, allBIok)
+	}
+	fmt.Printf("ADVERSARIAL fuzz: total=%d baseline_mismatch=%d bitidentical_mismatch=%d\n",
+		fuzzTotal, fuzzMismBase, fuzzMismBI)
+	if allBIok && fuzzMismBI == 0 {
+		fmt.Println("ADVERSARIAL RESULT: bit-identical kd matches stdlib on ALL tie cases.")
+	} else {
+		fmt.Println("ADVERSARIAL RESULT: FAILURE — bit-identical kd diverged.")
+	}
+}
+
+// bench: per (variant,P,image) build_ms, remap_ms (best of reps), Mpix/s, heap.
+func cmdBench(args []string) {
+	imgPath := args[0]
+	P := atoi(args[1])
+	reps := atoi(args[2])
+	if reps < 1 {
+		reps = 1
+	}
+	im, err := readPPM(imgPath)
+	if err != nil {
+		fmt.Println("ERR", err)
+		os.Exit(1)
+	}
+	pal := makePalette(P)
+	N := im.N()
+	out := make([]int32, N)
+
+	type method struct {
+		name  string
+		build func() (buildNs int64, newMatch func() func(uint8, uint8, uint8) int)
+	}
+	methods := []method{
+		{"parallel-linear", func() (int64, func() func(uint8, uint8, uint8) int) {
+			return 0, func() func(uint8, uint8, uint8) int {
+				m := &linearMatcher{pal}
+				return m.match
+			}
+		}},
+		{"kd-bitident-rec", func() (int64, func() func(uint8, uint8, uint8) int) {
+			t0 := nowNs()
+			t := buildKD(pal, "median", "cycle")
+			bn := nowNs() - t0
+			return bn, func() func(uint8, uint8, uint8) int {
+				s := &kdSearch{tieBreak: true}
+				return func(r, g, b uint8) int { return t.match(s, r, g, b) }
+			}
+		}},
+		{"kd-bitident-stack", func() (int64, func() func(uint8, uint8, uint8) int) {
+			t0 := nowNs()
+			t := buildKD(pal, "median", "cycle")
+			bn := nowNs() - t0
+			return bn, func() func(uint8, uint8, uint8) int {
+				s := &kdSearchStack{}
+				return func(r, g, b uint8) int { return s.match(t, r, g, b) }
+			}
+		}},
+		{"kd-baseline-rec", func() (int64, func() func(uint8, uint8, uint8) int) {
+			t0 := nowNs()
+			t := buildKD(pal, "median", "cycle")
+			bn := nowNs() - t0
+			return bn, func() func(uint8, uint8, uint8) int {
+				s := &kdSearch{tieBreak: false}
+				return func(r, g, b uint8) int { return t.match(s, r, g, b) }
+			}
+		}},
+	}
+
+	for _, m := range methods {
+		buildNs, newMatch := m.build()
+		var ms0 runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&ms0)
+		mallocs0 := ms0.Mallocs
+		best := int64(1) << 62
+		for rep := 0; rep < reps; rep++ {
+			t0 := nowNs()
+			remapParallel(im, out, newMatch)
+			d := nowNs() - t0
+			if d < best {
+				best = d
+			}
+		}
+		var ms1 runtime.MemStats
+		runtime.ReadMemStats(&ms1)
+		allocs := ms1.Mallocs - mallocs0
+		mpps := float64(N) / (float64(best) / 1e9) / 1e6
+		fmt.Printf("BENCH img=%dx%d P=%d method=%-18s build_ms=%.3f remap_ms=%.3f Mpix/s=%.1f allocs/run=%d heapMiB=%.0f\n",
+			im.W, im.H, P, m.name, float64(buildNs)/1e6, float64(best)/1e6, mpps,
+			allocs/uint64(reps), float64(ms1.HeapAlloc)/(1<<20))
+	}
+}
+
+// buildvariants: compare build shapes (median/midpoint x cycle/widest) for
+// build_ms and query Mpix/s (all bit-identical).
+func cmdBuildVariants(args []string) {
+	imgPath := args[0]
+	P := atoi(args[1])
+	reps := atoi(args[2])
+	if reps < 1 {
+		reps = 1
+	}
+	im, _ := readPPM(imgPath)
+	pal := makePalette(P)
+	N := im.N()
+	out := make([]int32, N)
+
+	for _, split := range []string{"median", "midpoint"} {
+		for _, axm := range []string{"cycle", "widest"} {
+			t0 := nowNs()
+			t := buildKD(pal, split, axm)
+			buildNs := nowNs() - t0
+			newMatch := func() func(uint8, uint8, uint8) int {
+				s := &kdSearch{tieBreak: true}
+				return func(r, g, b uint8) int { return t.match(s, r, g, b) }
+			}
+			best := int64(1) << 62
+			for rep := 0; rep < reps; rep++ {
+				ts := nowNs()
+				remapParallel(im, out, newMatch)
+				d := nowNs() - ts
+				if d < best {
+					best = d
+				}
+			}
+			mpps := float64(N) / (float64(best) / 1e9) / 1e6
+			fmt.Printf("BUILDVAR img=%dx%d P=%d split=%-8s axis=%-6s build_ms=%.3f remap_ms=%.3f Mpix/s=%.1f\n",
+				im.W, im.H, P, split, axm, float64(buildNs)/1e6, float64(best)/1e6, mpps)
+		}
+	}
+}

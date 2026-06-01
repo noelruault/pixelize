@@ -39,8 +39,8 @@ Authoring a palette: see `palettes/README.md` for the file formats.
 By default pixelize finds the exact nearest palette color for every pixel.
 That is the right choice for a single image, and it is already fast.
 
-When you process **many** images against the **same** palette, add `-lut` to
-the `batch` and `watch` commands:
+When you process **many** images against the **same** palette, add `-lut`
+(or its long form `-lookup-table`) to the `batch` and `watch` commands:
 
 ```sh
 pixelize batch ./photos -palette nes -size 64x64 -lut -o ./out

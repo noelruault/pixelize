@@ -56,6 +56,16 @@ func registerPipeline(fs *flag.FlagSet) *pipelineFlags {
 	return pf
 }
 
+// registerLUTFlags wires the -lut flag and its -lookup-table long alias to the
+// same target on fs. Only batch and watch call this: the lookup table is built
+// once and amortized across many renders, so it has no place on the
+// single-image command (where the exact path is already fast and more
+// accurate). help describes -lut; the alias shares the target variable.
+func registerLUTFlags(fs *flag.FlagSet, pf *pipelineFlags, help string) {
+	fs.BoolVar(&pf.lut, "lut", false, help)
+	fs.BoolVar(&pf.lut, "lookup-table", false, "alias of -lut")
+}
+
 // parseInterleaved splits args into flag args (parsed via fs) and
 // positionals, allowing IMAGE to appear before, between, or after
 // flags. Returns the positional args in order.

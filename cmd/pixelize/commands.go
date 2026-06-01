@@ -417,8 +417,7 @@ func runPalette(args []string) error {
 func runBatch(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("batch", flag.ContinueOnError)
 	pf := registerPipeline(fs)
-	fs.BoolVar(&pf.lut, "lut", false, "use a precomputed color lookup table: built once, reused across every image (~2-6% non-nearest, big speedup over a fixed palette)")
-	fs.BoolVar(&pf.lut, "lookup-table", false, "alias of -lut")
+	registerLUTFlags(fs, pf, "use a precomputed color lookup table: built once, reused across every image (~2-6% non-nearest, big speedup over a fixed palette)")
 	workers := fs.Int("workers", 0, "concurrent workers (default NumCPU)")
 	rest, err := parseInterleaved(fs, args)
 	if err != nil {
@@ -455,8 +454,7 @@ func runBatch(ctx context.Context, args []string) error {
 func runWatch(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	pf := registerPipeline(fs)
-	fs.BoolVar(&pf.lut, "lut", false, "use a precomputed color lookup table: built once, reused across re-renders (~2-6% non-nearest)")
-	fs.BoolVar(&pf.lut, "lookup-table", false, "alias of -lut")
+	registerLUTFlags(fs, pf, "use a precomputed color lookup table: built once, reused across re-renders (~2-6% non-nearest)")
 	rest, err := parseInterleaved(fs, args)
 	if err != nil {
 		return err

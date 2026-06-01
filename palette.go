@@ -98,56 +98,87 @@ func (p Palette[M]) Apply(ctx context.Context, img image.Image, opts ApplyOption
 }
 
 func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist DistanceFunc) (*Pattern[M], error) {
-	cp := p.ColorPalette()
 	b := src.Bounds()
 	w, h := b.Dx(), b.Dy()
+	nColors := len(p)
 
 	out := image.NewRGBA(b)
 	indices := make([][]int, w)
 	for x := range indices {
 		indices[x] = make([]int, h)
 	}
-	usage := make(map[int]int, len(p))
 
+	// Two exact paths, chosen once (not per pixel):
+	//   - useStdlib: replicate color.Palette.Index bit-for-bit against a
+	//     precomputed 16-bit palette table, reading raw bytes from src.Pix.
+	//     This is the flat-Pix16 form (research report 08): ~1.65x faster
+	//     than the prior At()/cp.Index() scan with near-zero hot-loop
+	//     allocation, and verified bit-identical (image, indices, usage).
+	//   - custom metric: linear scan over dist, reading the pixel straight
+	//     from src.Pix into a color.RGBA (same value At() would yield).
 	useStdlib := dist == nil
-
-	// match returns the nearest palette index for the pixel at (x, y),
-	// using the exact same decision as the serial path: stdlib
-	// color.Palette.Index when no custom metric is given, else the
-	// linear scan over dist. Output is bit-identical to the prior
-	// serial implementation.
-	match := func(x, y int) int {
-		c := src.At(x, y)
-		if useStdlib {
-			return cp.Index(c)
+	var tab []pal16
+	var cp color.Palette
+	if useStdlib {
+		tab = make([]pal16, nColors)
+		for i, e := range p {
+			tab[i] = pal16FromRGBA(e.R, e.G, e.B, 255)
 		}
-		return nearest(c, cp, dist)
+	} else {
+		cp = p.ColorPalette()
 	}
 
-	// Serial path for small images: goroutine setup would cost more than
-	// it saves. Also the only path when a cancellable ctx must be checked
-	// at fine granularity.
+	// scanBand quantizes rows [y0, y1), writing out.Pix and indices and
+	// tallying into counts (len == nColors). The useStdlib branch is hoisted
+	// out of the inner loop so the hot path is a tight per-pixel scan.
+	scanBand := func(y0, y1 int, counts []int) {
+		for y := y0; y < y1; y++ {
+			so := src.PixOffset(b.Min.X, y)
+			oo := out.PixOffset(b.Min.X, y)
+			yi := y - b.Min.Y
+			if useStdlib {
+				for xi := 0; xi < w; xi++ {
+					idx := indexRaw(src.Pix[so], src.Pix[so+1], src.Pix[so+2], src.Pix[so+3], tab)
+					e := p[idx]
+					out.Pix[oo], out.Pix[oo+1], out.Pix[oo+2], out.Pix[oo+3] = e.R, e.G, e.B, 255
+					indices[xi][yi] = idx
+					counts[idx]++
+					so += 4
+					oo += 4
+				}
+			} else {
+				for xi := 0; xi < w; xi++ {
+					c := color.RGBA{R: src.Pix[so], G: src.Pix[so+1], B: src.Pix[so+2], A: src.Pix[so+3]}
+					idx := nearest(c, cp, dist)
+					e := p[idx]
+					out.Pix[oo], out.Pix[oo+1], out.Pix[oo+2], out.Pix[oo+3] = e.R, e.G, e.B, 255
+					indices[xi][yi] = idx
+					counts[idx]++
+					so += 4
+					oo += 4
+				}
+			}
+		}
+	}
+
+	// Serial path for small images: goroutine setup would cost more than it
+	// saves, and a cancellable ctx can be checked per row.
 	if w*h < parallelMinPixels {
+		counts := make([]int, nColors)
 		for y := b.Min.Y; y < b.Max.Y; y++ {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			for x := b.Min.X; x < b.Max.X; x++ {
-				idx := match(x, y)
-				e := p[idx]
-				out.SetRGBA(x, y, e.Color())
-				indices[x-b.Min.X][y-b.Min.Y] = idx
-				usage[idx]++
-			}
+			scanBand(y, y+1, counts)
 		}
-		return &Pattern[M]{Image: out, Palette: p, Indices: indices, Usage: usage}, nil
+		return &Pattern[M]{Image: out, Palette: p, Indices: indices, Usage: countsToUsage(counts)}, nil
 	}
 
-	// Parallel path: split rows into contiguous bands, one worker per band.
-	// Workers share only read-only state (src, cp) plus disjoint output
-	// regions, so no locking is needed. Each worker writes its own slice of
-	// the output image, the per-column index buffers it owns, and a private
-	// usage map that is merged at the end. The per-pixel decision is
+	// Parallel path: split rows into contiguous bands, one worker per band
+	// (band = h/GOMAXPROCS is optimal per report 08; finer bands lose to
+	// goroutine churn). Workers share only read-only state (src, tab, cp)
+	// plus disjoint output regions, index ranges, and a private []int count
+	// array each, so no locking is needed. The per-pixel decision is
 	// identical to the serial path, so the result is bit-for-bit the same.
 	workers := runtime.GOMAXPROCS(0)
 	if workers > h {
@@ -155,7 +186,7 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 	}
 	band := (h + workers - 1) / workers
 
-	partials := make([]map[int]int, workers)
+	partials := make([][]int, workers)
 	var cancelled bool
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -170,30 +201,20 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 			y1 = b.Max.Y
 		}
 		wg.Add(1)
-		go func(y0, y1 int) {
+		go func(wkr, y0, y1 int) {
 			defer wg.Done()
-			local := make(map[int]int)
-			for y := y0; y < y1; y++ {
-				// Check cancellation once per row band boundary, not per
-				// pixel: cheap and still responsive.
-				if y == y0 {
-					if err := ctx.Err(); err != nil {
-						mu.Lock()
-						cancelled = true
-						mu.Unlock()
-						return
-					}
-				}
-				for x := b.Min.X; x < b.Max.X; x++ {
-					idx := match(x, y)
-					e := p[idx]
-					out.SetRGBA(x, y, e.Color())
-					indices[x-b.Min.X][y-b.Min.Y] = idx
-					local[idx]++
-				}
+			// One cancellation check per band; bands are short enough that
+			// this is responsive without per-pixel overhead.
+			if err := ctx.Err(); err != nil {
+				mu.Lock()
+				cancelled = true
+				mu.Unlock()
+				return
 			}
-			partials[wkr] = local
-		}(y0, y1)
+			counts := make([]int, nColors)
+			scanBand(y0, y1, counts)
+			partials[wkr] = counts
+		}(wkr, y0, y1)
 	}
 	wg.Wait()
 
@@ -203,9 +224,10 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 		}
 	}
 
-	for _, local := range partials {
-		for idx, n := range local {
-			usage[idx] += n
+	total := make([]int, nColors)
+	for _, counts := range partials {
+		for idx, n := range counts {
+			total[idx] += n
 		}
 	}
 
@@ -213,8 +235,78 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 		Image:   out,
 		Palette: p,
 		Indices: indices,
-		Usage:   usage,
+		Usage:   countsToUsage(total),
 	}, nil
+}
+
+// pal16 holds one palette color promoted to the 16-bit channel values that
+// color.Color.RGBA() yields (v|v<<8), so the nearest-color scan can run as
+// plain integer math with no per-pixel interface calls.
+type pal16 struct{ r, g, b, a uint32 }
+
+func pal16FromRGBA(r, g, b, a uint8) pal16 {
+	rr := uint32(r)
+	rr |= rr << 8
+	gg := uint32(g)
+	gg |= gg << 8
+	bb := uint32(b)
+	bb |= bb << 8
+	aa := uint32(a)
+	aa |= aa << 8
+	return pal16{rr, gg, bb, aa}
+}
+
+// sqDiff replicates image/color.sqDiff exactly: the squared difference of two
+// 16-bit channel values, scaled by >>2.
+func sqDiff(x, y uint32) uint32 {
+	var d uint32
+	if x > y {
+		d = x - y
+	} else {
+		d = y - x
+	}
+	return (d * d) >> 2
+}
+
+// indexRaw returns the nearest palette index for raw 8-bit channel bytes,
+// matching color.Palette.Index bit-for-bit: 8->16-bit promotion before
+// squaring, the alpha term, the strict-< first-match tie-break (lowest index
+// wins ties), and the early return on an exact match.
+func indexRaw(pr, pg, pb, pa uint8, tab []pal16) int {
+	cr := uint32(pr)
+	cr |= cr << 8
+	cg := uint32(pg)
+	cg |= cg << 8
+	cb := uint32(pb)
+	cb |= cb << 8
+	ca := uint32(pa)
+	ca |= ca << 8
+	ret := 0
+	bestSum := uint32(1<<32 - 1)
+	for i := range tab {
+		t := tab[i]
+		sum := sqDiff(cr, t.r) + sqDiff(cg, t.g) + sqDiff(cb, t.b) + sqDiff(ca, t.a)
+		if sum < bestSum {
+			if sum == 0 {
+				return i
+			}
+			ret, bestSum = i, sum
+		}
+	}
+	return ret
+}
+
+// countsToUsage converts a per-index count array to the sparse Usage map,
+// including only indices that were actually assigned (matching the prior
+// map-accumulation behavior, where unused indices have no entry).
+func countsToUsage(counts []int) map[int]int {
+	usage := make(map[int]int)
+	for idx, n := range counts {
+		if n > 0 {
+			usage[idx] = n
+		}
+	}
+	return usage
 }
 
 func (p Palette[M]) applyDither(ctx context.Context, src *image.RGBA) (*Pattern[M], error) {

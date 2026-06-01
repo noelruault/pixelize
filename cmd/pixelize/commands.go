@@ -114,12 +114,19 @@ func pipeline(ctx context.Context, inPath string, pf *pipelineFlags) error {
 		return runAnimatedGIF(ctx, inPath, pal, w, h, mode, pf.dither, pf.gifPath)
 	}
 
-	pat, err := pal.Apply(ctx, img, pixelize.ApplyOptions{
+	opts := pixelize.ApplyOptions{
 		Width:  w,
 		Height: h,
 		Resize: mode,
 		Dither: pf.dither,
-	})
+	}
+	switch {
+	case pf.fastLUT != nil:
+		opts.FastLUT = pf.fastLUT // prebuilt and shared (batch)
+	case pf.fast:
+		opts.Fast = true
+	}
+	pat, err := pal.Apply(ctx, img, opts)
 	if err != nil {
 		return err
 	}
@@ -410,6 +417,7 @@ func runPalette(args []string) error {
 func runBatch(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("batch", flag.ContinueOnError)
 	pf := registerPipeline(fs)
+	fs.BoolVar(&pf.fast, "fast", false, "approximate Fast mode (6-bit LUT, ~2-6% non-nearest); builds once, reused across all images")
 	workers := fs.Int("workers", 0, "concurrent workers (default NumCPU)")
 	rest, err := parseInterleaved(fs, args)
 	if err != nil {
@@ -431,6 +439,10 @@ func runBatch(ctx context.Context, args []string) error {
 	}
 	slog.Info("batch", "input_dir", inDir, "output_dir", outDir, "jobs", len(jobs))
 
+	if err := enableFastLUT(pf); err != nil {
+		return err
+	}
+
 	return pixelize.RunBatch(ctx, jobs, pixelize.BatchOptions{Workers: *workers}, func(ctx context.Context, j pixelize.BatchJob) error {
 		jpf := *pf
 		jpf.output = j.OutputPath
@@ -442,6 +454,7 @@ func runBatch(ctx context.Context, args []string) error {
 func runWatch(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	pf := registerPipeline(fs)
+	fs.BoolVar(&pf.fast, "fast", false, "approximate Fast mode (6-bit LUT, ~2-6% non-nearest); built once, reused across re-renders")
 	rest, err := parseInterleaved(fs, args)
 	if err != nil {
 		return err
@@ -451,8 +464,30 @@ func runWatch(ctx context.Context, args []string) error {
 		return fmt.Errorf("watch needs one IMAGE arg")
 	}
 	inPath := rest[0]
+	// The palette is fixed for the session, so build the Fast LUT once and
+	// reuse it across every re-render.
+	if err := enableFastLUT(pf); err != nil {
+		return err
+	}
 	return pixelize.Watch(ctx, inPath, func() error {
 		slog.Info("watch fired", "input", inPath)
 		return pipeline(ctx, inPath, pf)
 	})
+}
+
+// enableFastLUT builds the shared Fast-mode table once (the palette is fixed
+// for the run), so batch and watch reuse it across every image -- the only
+// place the approximate LUT is actually faster than the exact path. No-op
+// unless -fast was given.
+func enableFastLUT(pf *pipelineFlags) error {
+	if !pf.fast {
+		return nil
+	}
+	pal, _, err := loadPalette(pf.palette)
+	if err != nil {
+		return err
+	}
+	pf.fastLUT = pal.NewFastLUT()
+	slog.Info("fast mode: built shared LUT", "palette_size", len(pal))
+	return nil
 }

@@ -15,20 +15,25 @@ import (
 // pipelineFlags collects the flag values used by the default, batch,
 // and watch commands.
 type pipelineFlags struct {
-	size      string
-	palette   string
-	mode      string
-	dither    bool
-	sizeList  string
-	gifPath   string
-	loop      string
-	preview   bool
-	stats     bool
-	asJSON    bool
-	buildMap  string
-	pieces    string
-	output    string
-	verbose   int
+	size     string
+	palette  string
+	mode     string
+	dither   bool
+	sizeList string
+	gifPath  string
+	loop     string
+	preview  bool
+	stats    bool
+	asJSON   bool
+	buildMap string
+	pieces   string
+	output   string
+	verbose  int
+	fast     bool
+
+	// fastLUT, when set, is a prebuilt Fast-mode table reused across calls
+	// (batch builds it once for the whole run). Not a flag.
+	fastLUT *pixelize.FastLUT
 }
 
 func registerPipeline(fs *flag.FlagSet) *pipelineFlags {

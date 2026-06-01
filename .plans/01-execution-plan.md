@@ -319,22 +319,40 @@ cross-disciplinary enhancements that *proved out* in Phases 1–2.
   dramatically faster in the large-P / large-N cells, **and beats ImageMagick on
   both correctness (0% vs IM's ~22% non-nearest at P=64/256) and speed (~30× at 4K
   remap-only)** in the large-P regime.
+- **STATUS — DONE (as an inline dispatch, not a named function).** The selection
+  lives hoisted-once-per-call at the top of `applyNearest` (`palette.go`): default
+  metric + opaque + P ≥ `kdExactMinPaletteSize` → **exact kd**; default metric +
+  opaque + small P → **alpha-dropped flat-Pix16** (report 12); default metric +
+  non-opaque → **4-channel flat-Pix16**; custom metric → linear over the metric;
+  plus the gated run-length short-circuit (report 10) and the opt-in Fast LUT. The
+  branch is chosen once and hoisted out of the inner loop. Routing is asserted by
+  `TestParallelMatchesSerial` (every (size × P × metric × opacity) cell, bit-exact
+  vs the oracle). The boundary-aware LUT slot is N/A (Phase 2 rejected it). A
+  separately-named `selectMatcher` was judged not worth the indirection over the
+  hoisted switch; the regime coverage and routing test are the substance.
 
 ### 4.2 Task: Layer in the cheap, proven enhancements
-- **Hamerly + previous-pixel coherence pruning** on the linear/scan paths
-  (report 05 §2/§7): per-reference nearest-other-distance `s(c)`; seed each pixel's
-  upper bound with the previous pixel's chosen reference (scanline coherence).
-  **Exact**, trivial memory. Acceptance: measurably extends the regime where the
-  exact scan stays competitive (pushes the linear↔tree crossover to higher P);
-  still bit-exact.
-- **Morton (Z-order) LUT/grid layout** if a measured cache-hit improvement
-  justifies it (report 05 §8). Pure layout change, exact. Acceptance: a
-  non-trivial throughput gain on the LUT path; otherwise skip as not worth the
-  complexity.
-- **SoA + optional AVX2 distance kernel** behind a build tag, with a pure-Go
-  fallback (report 05 §9). Only if Phase 1/2 benchmarks show the scan paths are
-  compute-bound (not memory-bound) at the target sizes. Acceptance: exact, pure-Go
-  fallback always present, measurable speedup on the scan path.
+**STATUS — CLOSED (report 12, benchmark-first).** All three candidates were
+measured against the *current* shipped code and the gates were applied. None
+passed; one incidental bit-identical win fell out and shipped instead.
+- **Hamerly + previous-pixel coherence pruning** — **REJECTED.** The strict
+  coherence shortcut fires only 5–14 % of the time on real images and makes the
+  scan net slower than without it; the identical-pixel case it would help is
+  already captured, more cheaply, by the gated run-length path (report 10). Fails
+  the acceptance gate (does not extend the competitive regime).
+- **Morton (Z-order) LUT/grid layout** — **REJECTED.** ~2× *slower* than the
+  shipped row-major LUT (8.3 vs 4.2 ns/px): the 1 MiB table is already
+  cache-resident, so the per-query bit-spreading is pure overhead. Fails the gate
+  (no throughput gain).
+- **SoA + optional AVX2 distance kernel** — **REJECTED.** SoA is a no-op (3ch AoS =
+  3ch SoA within noise). AVX2's gate is not met: large-P exact is owned by the kd
+  tree (a SIMD linear kernel would have to beat kd in kd's own regime), and small-P
+  linear is cheap; the asm + build-tag maintenance is not repaid. No portable Go
+  SIMD path.
+- **SHIPPED instead (bonus, report 12):** the **alpha-drop on the opaque linear
+  scan** (`indexRawOpaque`) — bit-identical for opaque sources, ~25 % less work per
+  entry, measured 1.08–1.29× faster on the shipped parallel `applyNearest` (grows
+  with P). Gated on `src.Opaque()`; guarded by `TestParallelMatchesSerial`.
 
 ### 4.3 Task: Dithering path (if/when in scope)
 - Today `applyDither` uses stdlib `draw.FloydSteinberg`. If a faster/parallel
@@ -345,6 +363,15 @@ cross-disciplinary enhancements that *proved out* in Phases 1–2.
 
 **Phase 3 exit criteria:** the hybrid selector is live; enhancements that proved
 out are in; CI guards exactness and the accuracy/speed budgets.
+
+**STATUS — MET.** The selector is live (inline hoisted dispatch in `applyNearest`,
+§4.1). The enhancements that proved out are in (run-length report 10, flat-Pix16
+report 08, alpha-drop report 12); the three §4.2 candidates that did not are
+measured and closed (report 12). CI guards exactness (`TestParallelMatchesSerial`,
+`TestRunLengthMatchesSerial`, golden tests — all bit-exact vs the oracle, race-clean)
+and the Fast/LUT accuracy budget (`TestFastLUTAccuracy`). Matcher microbenchmarks
+(`bench_test.go`) and the pixelize-vs-ImageMagick suite (`bench/compare.sh`,
+`bench/history/`) track speed. **All three phases are complete.**
 
 ---
 

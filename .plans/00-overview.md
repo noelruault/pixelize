@@ -628,10 +628,16 @@ pixelize; "Fast" = bounded-error opt-in.
 4. **Do NOT port IM's tree literally** (climb-to-root is exact but ~190× too slow),
    and **do NOT use IM's `cache[]` on the non-dithered path** (adds 2.3–8.4% error,
    slower than kd).
-5. **Layer the cheap enhancements under everything:** run-length collapse, SoA +
-   flat-buffer access (kill the `At/SetRGBA` interface overhead), band streaming
-   for 8K, and the Hamerly + previous-pixel-coherence pruning to make the exact
-   scan scale better at medium P.
+5. **Layer the cheap enhancements under everything:** run-length collapse and
+   flat-buffer (flat-Pix16) access (kill the `At/SetRGBA` interface overhead) are
+   shipped and proven (reports 08, 10). **Update (report 12): the remaining
+   speculative enhancements were measured and closed.** Hamerly + previous-pixel
+   pruning, Morton/Z-order LUT layout, and SoA/AVX2 all **failed their gates** and
+   were rejected; the only bit-identical win from that sweep — dropping the alpha
+   term on the opaque linear scan (~25 % less work, 1.08–1.29×) — shipped instead.
+   Band streaming for 8K remains the OOM safety lever.
 
 This is a **hybrid with a regime-based selector**, exactly as the framing
 demands — see `01-execution-plan.md` for the dispatch table and phased build.
+**All three phases are now complete (Phase 1 shipped, Phase 2 closed by measured
+rejection of the boundary LUT, Phase 3 selector live + §4.2 closed by report 12).**

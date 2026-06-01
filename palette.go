@@ -108,35 +108,57 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 		indices[x] = make([]int, h)
 	}
 
-	// Two exact paths, chosen once (not per pixel):
-	//   - useStdlib: replicate color.Palette.Index bit-for-bit against a
-	//     precomputed 16-bit palette table, reading raw bytes from src.Pix.
-	//     This is the flat-Pix16 form (research report 08): ~1.65x faster
-	//     than the prior At()/cp.Index() scan with near-zero hot-loop
-	//     allocation, and verified bit-identical (image, indices, usage).
+	// Three exact paths, chosen once (not per pixel):
+	//   - useKD: default metric, large palette (P >= kdExactMinPaletteSize),
+	//     opaque source. The bit-identical kd-tree (report 09): ~2.2-2.6x
+	//     faster than the linear scan at P=256, growing with P. kd drops the
+	//     alpha term, so it is only valid when the source is opaque (then the
+	//     alpha term cancels and 8-bit RGB ordering matches stdlib exactly).
+	//   - useStdlib (linear): replicate color.Palette.Index bit-for-bit
+	//     against a precomputed 16-bit palette table, reading raw bytes from
+	//     src.Pix. The flat-Pix16 form (report 08). Used for small palettes
+	//     and as the opaque-alpha-independent default.
 	//   - custom metric: linear scan over dist, reading the pixel straight
 	//     from src.Pix into a color.RGBA (same value At() would yield).
 	useStdlib := dist == nil
+	useKD := useStdlib && nColors >= kdExactMinPaletteSize && src.Opaque()
+	var tree *kdTree
 	var tab []pal16
 	var cp color.Palette
-	if useStdlib {
+	switch {
+	case useKD:
+		tree = buildKDTree(p)
+	case useStdlib:
 		tab = make([]pal16, nColors)
 		for i, e := range p {
 			tab[i] = pal16FromRGBA(e.R, e.G, e.B, 255)
 		}
-	} else {
+	default:
 		cp = p.ColorPalette()
 	}
 
 	// scanBand quantizes rows [y0, y1), writing out.Pix and indices and
-	// tallying into counts (len == nColors). The useStdlib branch is hoisted
-	// out of the inner loop so the hot path is a tight per-pixel scan.
+	// tallying into counts (len == nColors). The path branch is hoisted out
+	// of the inner loop so the hot path is a tight per-pixel scan. The kd
+	// path keeps its own per-band search scratch (no shared mutable state).
 	scanBand := func(y0, y1 int, counts []int) {
+		var ks kdSearch
 		for y := y0; y < y1; y++ {
 			so := src.PixOffset(b.Min.X, y)
 			oo := out.PixOffset(b.Min.X, y)
 			yi := y - b.Min.Y
-			if useStdlib {
+			switch {
+			case useKD:
+				for xi := 0; xi < w; xi++ {
+					idx := tree.match(&ks, src.Pix[so], src.Pix[so+1], src.Pix[so+2])
+					e := p[idx]
+					out.Pix[oo], out.Pix[oo+1], out.Pix[oo+2], out.Pix[oo+3] = e.R, e.G, e.B, 255
+					indices[xi][yi] = idx
+					counts[idx]++
+					so += 4
+					oo += 4
+				}
+			case useStdlib:
 				for xi := 0; xi < w; xi++ {
 					idx := indexRaw(src.Pix[so], src.Pix[so+1], src.Pix[so+2], src.Pix[so+3], tab)
 					e := p[idx]
@@ -146,7 +168,7 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 					so += 4
 					oo += 4
 				}
-			} else {
+			default:
 				for xi := 0; xi < w; xi++ {
 					c := color.RGBA{R: src.Pix[so], G: src.Pix[so+1], B: src.Pix[so+2], A: src.Pix[so+3]}
 					idx := nearest(c, cp, dist)

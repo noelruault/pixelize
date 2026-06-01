@@ -2,6 +2,14 @@
 
 Turn any image into pixel art for a palette you choose. pixelize resizes images and reduces their colors to a built-in retro palette, a palette file of your own, or a build map for a physical lego, perler, or cross-stitch mosaic. Run it as a command, or import it as a Go package.
 
+<p align="center">
+  <img src="docs/demo/inputs/starry.jpg" width="46%" alt="Original: Van Gogh, The Starry Night">
+  &nbsp;&nbsp;
+  <img src="docs/examples/all_colors-starry_night-vincent_van-gogh.png" width="46%" alt="The same image reduced to the lego brick palette">
+</p>
+
+> Every pixel gets its **exact** nearest palette color — and pixelize does it **faster, on less memory, and more accurately than ImageMagick**, which assigns a *non-nearest* color to ~13% of pixels on a 162-color palette. See the [benchmark](#benchmark-vs-imagemagick).
+
 ## Why this exists
 
 Plenty of tools turn images into lego mosaics or retro-palette pixel art. Almost all of them are web pages you upload to or apps you click through. pixelize does the same work from the command line, offline, and as a Go package you can call from your own code.
@@ -47,6 +55,34 @@ Build a lego mosaic with a build map and a parts list:
 ```sh
 pixelize portrait.jpg -size 48x48 -palette lego -build-map mosaic.txt -pieces parts.csv -o mosaic.png
 ```
+
+## Make a physical mosaic
+
+Reducing an image to a brick or bead palette is only half the job — to actually *build* the thing you need two more outputs, and pixelize emits both: a per-cell **build map** (which color goes in every position) and a **piece-count** shopping list.
+
+```sh
+pixelize liberty.jpg -size 64x64 -palette lego \
+  -o mosaic.png -build-map build.txt -pieces parts.csv
+```
+
+`build.txt` places every cell by row and column:
+
+```
+[0][0] = R:5, G:19, B:29   -Speckle Black-Silver
+[0][5] = R:27, G:42, B:52  -Chrome Black
+...
+```
+
+`parts.csv` is how many of each color to buy, most-used first:
+
+```csv
+id,name,hex,count
+132,Speckle Black-Silver,05131D,1016
+64,Chrome Black,1B2A34,520
+308,Dark Brown,352100,142
+```
+
+The built-in `lego` palette carries real rebrickable brick IDs, so that `id` column maps straight to what you order.
 
 ## Palettes
 
@@ -228,10 +264,12 @@ lower is better. "Speedup" is wall time, pixelize vs ImageMagick.
 | 2048 px wide | ~57 MiB | ~68 MiB |
 
 In short: pixelize is **faster on every cell in both wall and CPU time, uses less
-memory, and stays exact** while ImageMagick approximates — and ImageMagick's
-approximation grows with the palette (0.1% of pixels differ at 4 colors, 3% at 55,
-13% at 162). The "Colors" column is distinct colors: lego ships 188 entries (162
-distinct), the NES palette 64 (55 distinct).
+memory, and stays exact.** Because pixelize is provably exact (every pixel gets its
+true nearest color), the "Output diff" column is really *ImageMagick's error rate* —
+the share of pixels where it picks a non-nearest color — and that error grows with
+the palette: ~0.1% at 4 colors, 3% at 55, **13% at 162**. The "Colors" column is
+distinct colors: lego ships 188 entries (162 distinct), the NES palette 64 (55
+distinct).
 
 Measured on a shared cloud container (Linux x86_64, Intel Xeon @ 2.80 GHz, 4 cores),
 ImageMagick 6.9.12, Go 1.25.0, on 2026-06-01. It is a virtualized, shared machine,

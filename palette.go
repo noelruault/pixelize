@@ -6,7 +6,14 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"runtime"
+	"sync"
 )
+
+// parallelMinPixels gates the row-banded parallel path in applyNearest.
+// Below this, goroutine setup costs more than the scan saves, so we stay
+// serial. ~256x256.
+const parallelMinPixels = 1 << 16
 
 // Entry is one palette color plus arbitrary typed metadata.
 //
@@ -104,22 +111,101 @@ func (p Palette[M]) applyNearest(ctx context.Context, src *image.RGBA, dist Dist
 
 	useStdlib := dist == nil
 
-	for y := b.Min.Y; y < b.Max.Y; y++ {
+	// match returns the nearest palette index for the pixel at (x, y),
+	// using the exact same decision as the serial path: stdlib
+	// color.Palette.Index when no custom metric is given, else the
+	// linear scan over dist. Output is bit-identical to the prior
+	// serial implementation.
+	match := func(x, y int) int {
+		c := src.At(x, y)
+		if useStdlib {
+			return cp.Index(c)
+		}
+		return nearest(c, cp, dist)
+	}
+
+	// Serial path for small images: goroutine setup would cost more than
+	// it saves. Also the only path when a cancellable ctx must be checked
+	// at fine granularity.
+	if w*h < parallelMinPixels {
+		for y := b.Min.Y; y < b.Max.Y; y++ {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			for x := b.Min.X; x < b.Max.X; x++ {
+				idx := match(x, y)
+				e := p[idx]
+				out.SetRGBA(x, y, e.Color())
+				indices[x-b.Min.X][y-b.Min.Y] = idx
+				usage[idx]++
+			}
+		}
+		return &Pattern[M]{Image: out, Palette: p, Indices: indices, Usage: usage}, nil
+	}
+
+	// Parallel path: split rows into contiguous bands, one worker per band.
+	// Workers share only read-only state (src, cp) plus disjoint output
+	// regions, so no locking is needed. Each worker writes its own slice of
+	// the output image, the per-column index buffers it owns, and a private
+	// usage map that is merged at the end. The per-pixel decision is
+	// identical to the serial path, so the result is bit-for-bit the same.
+	workers := runtime.GOMAXPROCS(0)
+	if workers > h {
+		workers = h
+	}
+	band := (h + workers - 1) / workers
+
+	partials := make([]map[int]int, workers)
+	var cancelled bool
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	for wkr := 0; wkr < workers; wkr++ {
+		y0 := b.Min.Y + wkr*band
+		if y0 >= b.Max.Y {
+			break
+		}
+		y1 := y0 + band
+		if y1 > b.Max.Y {
+			y1 = b.Max.Y
+		}
+		wg.Add(1)
+		go func(y0, y1 int) {
+			defer wg.Done()
+			local := make(map[int]int)
+			for y := y0; y < y1; y++ {
+				// Check cancellation once per row band boundary, not per
+				// pixel: cheap and still responsive.
+				if y == y0 {
+					if err := ctx.Err(); err != nil {
+						mu.Lock()
+						cancelled = true
+						mu.Unlock()
+						return
+					}
+				}
+				for x := b.Min.X; x < b.Max.X; x++ {
+					idx := match(x, y)
+					e := p[idx]
+					out.SetRGBA(x, y, e.Color())
+					indices[x-b.Min.X][y-b.Min.Y] = idx
+					local[idx]++
+				}
+			}
+			partials[wkr] = local
+		}(y0, y1)
+	}
+	wg.Wait()
+
+	if cancelled {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		for x := b.Min.X; x < b.Max.X; x++ {
-			c := src.At(x, y)
-			var idx int
-			if useStdlib {
-				idx = cp.Index(c)
-			} else {
-				idx = nearest(c, cp, dist)
-			}
-			e := p[idx]
-			out.SetRGBA(x, y, e.Color())
-			indices[x-b.Min.X][y-b.Min.Y] = idx
-			usage[idx]++
+	}
+
+	for _, local := range partials {
+		for idx, n := range local {
+			usage[idx] += n
 		}
 	}
 

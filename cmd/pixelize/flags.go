@@ -29,10 +29,10 @@ type pipelineFlags struct {
 	pieces   string
 	output   string
 	verbose  int
-	fast     bool
+	lut      bool
 
 	// fastLUT, when set, is a prebuilt Fast-mode table reused across calls
-	// (batch builds it once for the whole run). Not a flag.
+	// (batch/watch build it once for the whole run). Not a flag.
 	fastLUT *pixelize.FastLUT
 }
 

@@ -123,7 +123,7 @@ func pipeline(ctx context.Context, inPath string, pf *pipelineFlags) error {
 	switch {
 	case pf.fastLUT != nil:
 		opts.FastLUT = pf.fastLUT // prebuilt and shared (batch)
-	case pf.fast:
+	case pf.lut:
 		opts.Fast = true
 	}
 	pat, err := pal.Apply(ctx, img, opts)
@@ -417,7 +417,7 @@ func runPalette(args []string) error {
 func runBatch(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("batch", flag.ContinueOnError)
 	pf := registerPipeline(fs)
-	fs.BoolVar(&pf.fast, "fast", false, "approximate Fast mode (6-bit LUT, ~2-6% non-nearest); builds once, reused across all images")
+	fs.BoolVar(&pf.lut, "lut", false, "use a precomputed color lookup table: built once, reused across every image (~2-6% non-nearest, big speedup over a fixed palette)")
 	workers := fs.Int("workers", 0, "concurrent workers (default NumCPU)")
 	rest, err := parseInterleaved(fs, args)
 	if err != nil {
@@ -454,7 +454,7 @@ func runBatch(ctx context.Context, args []string) error {
 func runWatch(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	pf := registerPipeline(fs)
-	fs.BoolVar(&pf.fast, "fast", false, "approximate Fast mode (6-bit LUT, ~2-6% non-nearest); built once, reused across re-renders")
+	fs.BoolVar(&pf.lut, "lut", false, "use a precomputed color lookup table: built once, reused across re-renders (~2-6% non-nearest)")
 	rest, err := parseInterleaved(fs, args)
 	if err != nil {
 		return err
@@ -475,12 +475,12 @@ func runWatch(ctx context.Context, args []string) error {
 	})
 }
 
-// enableFastLUT builds the shared Fast-mode table once (the palette is fixed
-// for the run), so batch and watch reuse it across every image -- the only
-// place the approximate LUT is actually faster than the exact path. No-op
-// unless -fast was given.
+// enableFastLUT builds the shared color lookup table once (the palette is
+// fixed for the run), so batch and watch reuse it across every image -- the
+// only place the approximate LUT is actually faster than the exact path.
+// No-op unless -lut was given.
 func enableFastLUT(pf *pipelineFlags) error {
-	if !pf.fast {
+	if !pf.lut {
 		return nil
 	}
 	pal, _, err := loadPalette(pf.palette)
@@ -488,6 +488,6 @@ func enableFastLUT(pf *pipelineFlags) error {
 		return err
 	}
 	pf.fastLUT = pal.NewFastLUT()
-	slog.Info("fast mode: built shared LUT", "palette_size", len(pal))
+	slog.Info("lut: built shared lookup table", "palette_size", len(pal))
 	return nil
 }

@@ -34,6 +34,34 @@ pixelize palette nes -show nes.png   # render a palette as a swatch PNG
 
 Authoring a palette: see `palettes/README.md` for the file formats.
 
+## Fast color matching with `-lut`
+
+By default pixelize finds the exact nearest palette color for every pixel.
+That is the right choice for a single image, and it is already fast.
+
+When you process **many** images against the **same** palette, add `-lut` to
+the `batch` and `watch` commands:
+
+```sh
+pixelize batch ./photos -palette nes -size 64x64 -lut -o ./out
+pixelize watch sprite.png -palette nes -size 64x64 -lut -o sprite_nes.png
+```
+
+`-lut` precomputes a color **lookup table** for the palette once, then reuses
+it to map every pixel of every image with a single table read instead of a
+fresh nearest-color search. The result is roughly a **4x speedup** on large
+batches.
+
+The trade-off is a small approximation: about **2-6% of pixels** get their
+second-nearest color instead of the exact nearest (the table groups similar
+colors into buckets). For pixel art against a fixed palette this is usually
+invisible; when you need the exact result, just leave `-lut` off.
+
+It is only offered on `batch` and `watch` on purpose: the table costs a moment
+to build, so it only pays off when **reused** across images. On a single
+conversion the plain (exact) command is both faster and more accurate, so
+`-lut` is not available there.
+
 ## Status
 
 Published. See [DEMO.md](DEMO.md) for an end-to-end walkthrough of every feature against six paintings and two animated GIFs.

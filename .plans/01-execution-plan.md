@@ -11,6 +11,27 @@ layered under all paths. Separate **proven, low-risk wins (Phase 1)** from
 **put-it-into-practice experiments (Phase 2)** from **integration + borrowed
 enhancements (Phase 3)**.
 
+**Optimization target (the star): wall-clock time.** Minimize per-image elapsed
+time. CPU and RAM are spendable to reduce wall time, BUT only when the trade is
+efficient:
+
+- **Efficiency gate.** Adopt a faster-but-heavier variant over the current best
+  only if the proportional wall-time reduction is **>=** the proportional increase
+  in resource cost. Example: +20% CPU work for only -10% time is **rejected** (cost
+  20 > gain 10). Faster-and-not-heavier: always take it. Tie on time: take the
+  leaner one.
+- **"CPU cost" means total CPU work (core-seconds), not utilization.** Using more
+  of the cores you already have via parallelism keeps total work ~flat while wall
+  time drops, so **parallelism always passes** the gate. The gate bites only when a
+  variant does genuinely more total work, makes redundant passes, holds more memory,
+  or uses a costlier metric for its speed.
+- **Two hard exceptions that override "spend freely":** (a) never let memory growth
+  push 8K toward OOM — an OOM-kill is infinitely slow, so band streaming stays
+  available as the memory-safety lever; (b) never let "faster" silently downgrade
+  the **exact default** to an approximate path — exact stays the default, Fast/
+  approximate is opt-in only. Within the exact set the selector picks the lowest
+  measured time; "fastest overall" applies only to the explicitly-opted-in Fast mode.
+
 **RE-PHASING (report 04 now COMPLETE and MEASURED — see `00-overview.md` §2.1,
 §3.5).** Report 04's measured results change the phasing:
 - **The exact kd-tree branch-and-bound moves UP from a Phase-2 experiment into the
@@ -462,6 +483,13 @@ the concrete checklist that produces each `bench/history/` entry.
   3. **Beat-IM invariant** (large-P regime): the exact path stays 0% non-nearest
      (vs IM ~22%) and remap-only faster than IM; if a change erodes either, it is a
      regression.
+  4. **Efficiency gate (wall-clock is the star).** When a commit adopts a heavier
+     variant to go faster, record total CPU work (core-seconds) and peak RAM
+     alongside `remap_ms`, and verify the proportional time gain **>=** the
+     proportional resource increase vs the prior entry. A change that wins <X% time
+     for >X% more CPU work or RAM (e.g. +20% CPU for -10% time) fails the gate unless
+     the narrative justifies the exception. Parallelism (more utilization, ~flat
+     total work) always passes. Among equally-fast variants, the leaner one wins.
 - **Accuracy budget for approximate paths (test-enforced, recorded each iteration):**
   for the 6-bit LUT, **≤ ~8% of pixels differ** with **max color error ≤ ~35 RGB
   units** on a random palette (report 03: 4.6–7.2% / ≤34; report 04 verify: 1.9–8.4%

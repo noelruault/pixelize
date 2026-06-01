@@ -59,3 +59,28 @@ the table is built once and reused (batch/watch).
 Regression gate: exact paths report 0% non-nearest (golden + parallel + run-length
 tests, race-clean); the LUT stays inside its ~2-6% accuracy budget
 (TestFastLUTAccuracy).
+
+### Resource profile (time / allocations / RAM)
+
+Allocations per matcher call (go test -benchmem, ~207k-px image), before vs after
+the alpha-drop — IDENTICAL, the optimization reuses the existing palette table:
+
+  palette  before              after
+  gameboy  536 allocs/2.62MB   536 allocs/2.62MB
+  pico8    539 allocs/2.62MB   539 allocs/2.62MB
+  nes      541 allocs/2.62MB   541 allocs/2.62MB
+  lego     983 allocs/2.66MB   983 allocs/2.66MB   (kd builds the tree; untouched)
+
+The ~2.6 MB/call is the output RGBA + index buffers for the image, independent of
+the change; allocs grow with palette only on the kd path (tree build).
+
+Peak RSS (ru_maxrss via os.wait4), monet.jpg upscaled to 2048px wide:
+
+  pixelize exact (lego/kd)     56.9 MiB   wall 0.29s
+  pixelize exact (nes/linear)  56.6 MiB   wall 0.27s
+  pixelize batch -lut (lego)   57.9 MiB   wall 0.34s
+  ImageMagick -colors 162      68.3 MiB   wall 1.61s
+
+pixelize is ~17% lighter on peak RAM AND ~5x faster wall than ImageMagick on a
+single large render, while remaining exact. The alpha-drop adds zero allocations
+and no measurable RAM (nes 56.6 vs lego 56.9 MiB).

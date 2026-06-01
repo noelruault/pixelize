@@ -1,5 +1,10 @@
 # MIGRATION: this research belongs in `noelruault/research`
 
+> **Agents/automation:** follow `AGENT-MIGRATION-INSTRUCTIONS.md` in this directory
+> — it is the current, actionable runbook with the full file list (reports 01–12 +
+> the reverse-engineering scratch). The list below is the original historical note,
+> kept for context only; it predates reports 08–12.
+
 ## Destination
 
 This entire folder is staged here temporarily. Its permanent home is:

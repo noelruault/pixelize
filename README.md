@@ -275,6 +275,12 @@ so treat absolute numbers as indicative — the ratios between tools survive the
 better than the raw values. Run `bench/compare.sh` for numbers on your own hardware;
 it prints the machine, cores, and tool versions it ran on.
 
+The reverse-engineering of ImageMagick's approximate remap, the algorithm
+bake-offs behind the exact kd-tree and the `-lut` fast mode, and the full
+measured evidence for the numbers above live in the
+[nearest-color-scaling research record](https://github.com/noelruault/research/tree/main/nearest-color-scaling)
+in `noelruault/research`.
+
 ## Contributing
 
 There is no `CONTRIBUTING.md` yet. The smallest useful change is a new palette: add a CSV to `palettes/` and it becomes available by name. Two other good entry points are a new input format in `decode/` and a new terminal backend in `preview/`. Each is a small, self-contained package.

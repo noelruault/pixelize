@@ -80,8 +80,9 @@ efficient:
   **exact-kd with the `<=` fix — report 04 MEASURED it bit-exact, 0% non-nearest at
   P=16/64/256, and ~30× faster than IM at 4K**, IM-climb tree, 6-bit LUT, IM dither
   cache). The challenger source is also preserved verbatim at the bottom of
-  `.plans/research/04-informed-challenger-data.txt` as a backup if a container
-  reset loses `/tmp`. The kd is now the proven large-P exact path, not a speculative
+  `04-informed-challenger-data.txt` in the nearest-color-scaling research record
+  (now at `noelruault/research/nearest-color-scaling/`; see
+  `.plans/research/MOVED.md`) as a backup if a container reset loses `/tmp`. The kd is now the proven large-P exact path, not a speculative
   prototype.
 - **`bench/compare.sh` already exists** and is the harness to reuse: subcommands
   `build` / `verify` / `matrix` / `im` (incl. remap-vs-I/O isolation) / `accuracy`
@@ -452,7 +453,8 @@ and the Fast/LUT accuracy budget (`TestFastLUTAccuracy`). Matcher microbenchmark
 ## 7. One-screen "start here" for Phase 1
 
 1. `bench/compare.sh build` (uses the existing `/tmp` prototypes, or rebuilds the
-   challenger from `.plans/research/04-informed-challenger-data.txt`).
+   challenger from `04-informed-challenger-data.txt` in the research record at
+   `noelruault/research/nearest-color-scaling/`; see `.plans/research/MOVED.md`).
 2. `bench/compare.sh verify` to confirm parallel-linear and exact-kd give **0
    non-nearest** (kd has the `<=` fix).
 3. In pixelize, replace `applyNearest`'s serial `At/SetRGBA` loop with a

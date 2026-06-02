@@ -1,7 +1,9 @@
 # 00 — Overview & Synthesis: Scaling pixelize's Nearest-Color Palette Mapping
 
 **Role of this document.** This is the consolidated, judged synthesis of the five
-research reports in `.plans/research/` (01 ImageMagick reverse-engineering, 02
+research reports in the nearest-color-scaling research record — now at
+`noelruault/research/nearest-color-scaling/` (they used to live in `.plans/research/`;
+see `.plans/research/MOVED.md`) — (01 ImageMagick reverse-engineering, 02
 algorithm/library survey, 03 measured experiments, 04 informed challenger, 05
 cross-disciplinary transfer), grounded against the current pixelize source
 (`palette.go`, `distance.go`). It is **planning only** — no pixelize source is

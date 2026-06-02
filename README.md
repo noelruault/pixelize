@@ -278,8 +278,8 @@ it prints the machine, cores, and tool versions it ran on.
 The reverse-engineering of ImageMagick's approximate remap, the algorithm
 bake-offs behind the exact kd-tree and the `-lut` fast mode, and the full
 measured evidence for the numbers above live in the
-[nearest-color-scaling research record](https://github.com/noelruault/research/tree/main/nearest-color-scaling)
-in `noelruault/research`.
+[nearest-color-scaling research record](https://github.com/noelruault/research/tree/86bd65da70c654c33cbf33fde213b6bf78180391/nearest-color-scaling)
+in `noelruault/research` (pinned to the import commit so the cited evidence stays put).
 
 ## Contributing
 

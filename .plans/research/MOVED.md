@@ -4,8 +4,9 @@ The pixelize nearest-color-scaling research record (reports 01–12 + their
 raw-data companions + the ImageMagick reverse-engineering scratch) has moved to
 its permanent home:
 
-    noelruault/research → nearest-color-scaling/
-    https://github.com/noelruault/research/tree/main/nearest-color-scaling
+    noelruault/research/nearest-color-scaling/
+    https://github.com/noelruault/research/tree/86bd65da70c654c33cbf33fde213b6bf78180391/nearest-color-scaling
+    (pinned to the import commit; browse the branch tip for any later edits)
 
 Imported from pixelize@551d4f2 (branch
 `claude/extract-nearest-color-scaling-VtO3b`; original authorship lineage

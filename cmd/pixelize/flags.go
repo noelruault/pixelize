@@ -31,6 +31,11 @@ type pipelineFlags struct {
 	verbose  int
 	lut      bool
 
+	// Palette-derivation flags (used with -palette auto:N).
+	quantize  string  // color space: auto | rgb | oklab
+	curveInit bool    // space-filling-curve init (helps at N>=256)
+	merge     float64 // merge palette colors closer than this (8-bit RGB); 0=off
+
 	// fastLUT, when set, is a prebuilt Fast-mode table reused across calls
 	// (batch/watch build it once for the whole run). Not a flag.
 	fastLUT *pixelize.FastLUT
@@ -51,6 +56,9 @@ func registerPipeline(fs *flag.FlagSet) *pipelineFlags {
 	fs.StringVar(&pf.buildMap, "build-map", "", "write per-pixel build map to PATH")
 	fs.StringVar(&pf.pieces, "pieces", "", "write piece-count CSV to PATH")
 	fs.StringVar(&pf.output, "o", "", "output PNG path")
+	fs.StringVar(&pf.quantize, "quantize", "auto", "with -palette auto: color space auto|rgb|oklab")
+	fs.BoolVar(&pf.curveInit, "curve-init", false, "with -palette auto: space-filling-curve init (helps at N>=256)")
+	fs.Float64Var(&pf.merge, "merge", 0, "merge palette colors closer than DIST (8-bit RGB); 0=off")
 	fs.BoolFunc("v", "verbose (info)", func(string) error { pf.verbose = 1; return nil })
 	fs.BoolFunc("vv", "very verbose (debug)", func(string) error { pf.verbose = 2; return nil })
 	return pf

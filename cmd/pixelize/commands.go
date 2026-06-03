@@ -106,13 +106,19 @@ func pipeline(ctx context.Context, inPath string, pf *pipelineFlags) error {
 	var paletteHint string
 	var autoDist pixelize.DistanceFunc
 	if n, ok := parseAuto(pf.palette); ok {
-		// Derive a palette from the image (workflow B). Threading the matched
-		// assignment metric through the GIF paths is future work, so reject
-		// the combination for now rather than silently mis-assigning.
-		if pf.gifPath != "" {
-			return fmt.Errorf("-palette auto is not yet supported with -gif")
+		// Derive a palette from the image (workflow B).
+		o := &quantize.Options{CurveInit: pf.curveInit}
+		switch strings.ToLower(pf.quantize) {
+		case "rgb":
+			o.Space = quantize.SpaceRGB
+		case "oklab":
+			o.Space = quantize.SpaceOKLab
+		case "", "auto":
+			o.Space = quantize.SpaceAuto
+		default:
+			return fmt.Errorf("unknown -quantize %q (want auto | rgb | oklab)", pf.quantize)
 		}
-		res, gerr := quantize.Generate(img, n, nil)
+		res, gerr := quantize.Generate(img, n, o)
 		if gerr != nil {
 			return gerr
 		}
@@ -125,12 +131,19 @@ func pipeline(ctx context.Context, inPath string, pf *pipelineFlags) error {
 		}
 	}
 
+	// Optional "merge similar colors" post-pass — works on any palette.
+	if pf.merge > 0 {
+		before := len(pal)
+		pal = quantize.Merge(pal, pf.merge)
+		slog.Info("merged palette", "from", before, "to", len(pal), "dist", pf.merge)
+	}
+
 	if pf.gifPath != "" && len(sizeList) > 0 {
-		return runGIFSizeList(ctx, img, pal, sizeList, mode, pf.dither, loopMode, pf.gifPath)
+		return runGIFSizeList(ctx, img, pal, autoDist, sizeList, mode, pf.dither, loopMode, pf.gifPath)
 	}
 
 	if pf.gifPath != "" && strings.EqualFold(filepath.Ext(inPath), ".gif") {
-		return runAnimatedGIF(ctx, inPath, pal, w, h, mode, pf.dither, pf.gifPath)
+		return runAnimatedGIF(ctx, inPath, pal, autoDist, w, h, mode, pf.dither, pf.gifPath)
 	}
 
 	opts := pixelize.ApplyOptions{
@@ -222,6 +235,7 @@ func runGIFSizeList(
 	ctx context.Context,
 	img image.Image,
 	pal pixelize.Palette[pixelize.EntryMeta],
+	dist pixelize.DistanceFunc,
 	sizes []int,
 	mode pixelize.ResizeMode,
 	dither bool,
@@ -237,7 +251,7 @@ func runGIFSizeList(
 	}
 	for _, s := range sizes {
 		pat, err := pal.Apply(ctx, img, pixelize.ApplyOptions{
-			Width: s, Height: s, Resize: mode, Dither: dither,
+			Width: s, Height: s, Resize: mode, Dither: dither, Distance: dist,
 		})
 		if err != nil {
 			return err
@@ -268,6 +282,7 @@ func runAnimatedGIF(
 	ctx context.Context,
 	inPath string,
 	pal pixelize.Palette[pixelize.EntryMeta],
+	dist pixelize.DistanceFunc,
 	w, h int,
 	mode pixelize.ResizeMode,
 	dither bool,
@@ -284,7 +299,7 @@ func runAnimatedGIF(
 	out := make([]*image.RGBA, len(anim.Frames))
 	for i, frame := range anim.Frames {
 		pat, err := pal.Apply(ctx, frame, pixelize.ApplyOptions{
-			Width: w, Height: h, Resize: mode, Dither: dither,
+			Width: w, Height: h, Resize: mode, Dither: dither, Distance: dist,
 		})
 		if err != nil {
 			return fmt.Errorf("frame %d: %w", i, err)

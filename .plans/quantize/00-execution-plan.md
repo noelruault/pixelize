@@ -48,13 +48,13 @@ Legend: ✅ done · 🟡 partial · ⬜ pending.
 |---|---|---|
 | 0 — baseline harness | 🟡 | Harness + metrics (CIEDE2000 self-tested vs Sharma) + median-cut/popularity floor done (`research/quantization/04`). **Left:** add **Wu** + **octree** as named baselines. |
 | 1 — lead pieces | 🟡 | Maximin-seeded k-means **and** PCA-divisive implemented + measured (`05`); gate met — PCA-divisive beats median cut, maximin ruled out. **Left:** the `Ckmeans.1d.dp` optimal-1D split variant. |
-| 2 — color space | 🟡 | OKLab implemented + measured; ruled out under RGB assignment (`05` D3). **Left:** **HyAB**, and the matched-assignment OKLab rematch (`02`). |
+| 2 — color space | ✅ | **Matched-assignment rematch won (`02`): OKLab cluster+assign beats pngquant at every N.** D3 was an assignment mismatch, now fixed. **Left (optional):** HyAB centroid metric. |
 | 3 — refinement accel | ⬜ | Plain Lloyd used; **weighted sort-means / Hamerly** not yet benchmarked (`07`). |
 | 4 — stack | 🟡 | Provisional stack chosen in `05` (default = PCA-divisive; quality = init+refine). **Left:** formal integration report `09`. |
 | 5 — promote to pixelize | ⬜ | No engine code yet; `quantize` pkg + CLI flags + golden/determinism tests pending. |
-| 6 — competition shootout | 🟡 | Harness built (`bench/compare-quant.sh` + emit/score); on the six paintings **ours/refine beats pngquant at N≤64 and ImageMagick at every N**, ours/pca beats IM at N≤64 (`10`). **Left:** CQ100/Kodak scale-up + GIMP; pngquant still wins N=256. |
+| 6 — competition shootout | 🟡 | Harness built; on six paintings **ours/refine-oklab beats pngquant at EVERY N** (incl. N=256, 6/6) and ImageMagick everywhere (`10`,`02`). **Left:** CQ100/Kodak scale-up + GIMP. |
 
-**Reports:** `01`, `04`, `05`, `10` ✅ · `02, 03, 06, 07, 09` ⬜.
+**Reports:** `01`, `02`, `04`, `05`, `06`, `07`, `10` ✅ · `03, 09` ⬜.
 **Cross-cutting finding (from `05`):** seeded k-means is non-deterministic because Go
 map order randomizes the histogram → **the engine must sort the histogram
 canonically** (carry into Phase 5 correctness).
@@ -81,7 +81,7 @@ Implement, each as a `Quantizer`, measured as a delta vs Wu:
 *Gate:* at least one must beat Wu on mean ΔE2000 at N=16 and N=64 without losing
 determinism. *Output:* `05-pieces-selection-exotic.md` (+data).
 
-### Phase 2 — Color space as a variable (P1) — 🟡 PARTIAL
+### Phase 2 — Color space as a variable (P1) — ✅ DONE
 Add an **OKLab** selection mode (cluster/seed in OKLab; evaluation stays CIEDE2000)
 and **A/B HyAB** as the centroid metric. Re-run Phase-0/1 pieces in each space.
 *Watch:* the documented trap — CIELAB does **not** automatically beat RGB for
@@ -133,7 +133,7 @@ Done when **all** of:
 1. ⬜ **Correctness.** Derived palette + exact nearest-color assignment (reuses the
    shipped kd-tree); the default algorithm is **deterministic** — a golden test in
    pixelize asserts byte-identical palette + output across runs and platforms.
-2. 🟡 **Quality, measured.** *(Met at N≤64 on six paintings: ours/refine < pngquant & ImageMagick; ours/pca < ImageMagick. N=256 pngquant leads by ~4%. CQ100 scale-up pending — report 10.)* On CQ100 at N∈{4,16,64,256}: the default **beats median
+2. 🟡 **Quality, measured.** *(On six paintings, OKLab-matched refine beats pngquant AND ImageMagick at every N (report 02/10); deterministic ours/pca beats ImageMagick at N≤64. CQ100 scale-up still pending before the claim is final.)* On CQ100 at N∈{4,16,64,256}: the default **beats median
    cut and ImageMagick/Aseprite octree** on mean ΔE2000 at every N; the `kmeans`
    quality mode is **≤ libimagequant's mean ΔE2000** (or within a stated small
    margin) with a published per-image win-rate. Numbers and harness are committed

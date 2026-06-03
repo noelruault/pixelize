@@ -40,5 +40,7 @@ correctness on the default path is non-negotiable). Referenced by both plans abo
 
 ---
 
-The generalized method behind these — *fan-out, measure, keep-or-discard-with-a-
-number* — is written up portably in [`../docs/methodology.md`](../docs/methodology.md).
+The generalized method behind these (*fan-out, measure, keep-or-discard-with-a-number*)
+is written up portably as the
+[research-driven-engineering](https://github.com/noelruault/aitelier/blob/main/prompts/research-driven-engineering.md)
+method in `noelruault/aitelier` (it used to live here at `docs/methodology.md`).

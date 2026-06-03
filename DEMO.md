@@ -406,11 +406,44 @@ pixelize palettes where       # print the resolved user dir
 
 Files in the user dir win over embedded copies. Edit `~/.config/pixelize/palettes/lego.csv` and `pixelize -palette lego ...` picks up your edits.
 
+## 14. Derive a palette from the image (`-palette auto:N`)
+
+Instead of snapping to a *fixed* palette, derive one *from the image* — the "any
+photo into clean pixel art" path. The working color space is chosen by palette size
+(RGB for small, OKLab for large; matched on assignment), and it's deterministic.
+
+```sh
+# 16 colors (RGB regime), aspect-preserving to 128 tall
+pixelize docs/demo/inputs/starry.jpg -size 0x128 -palette auto:16 -o docs/demo/outputs/starry_auto16.png
+
+# 64 colors (OKLab regime — perceptual)
+pixelize docs/demo/inputs/monet.jpg -size 0x128 -palette auto:64 -o docs/demo/outputs/monet_auto64.png
+
+# 256 colors with the space-filling-curve initializer (hinted at N>=256)
+pixelize docs/demo/inputs/liberty.jpg -size 0x128 -palette auto:256 -curve-init -o docs/demo/outputs/liberty_auto256.png
+
+# derive 32, then merge near-duplicate colors within 10 (8-bit RGB) -> 29 colors
+pixelize docs/demo/inputs/pearl.jpg -size 0x128 -palette auto:32 -merge 10 -o docs/demo/outputs/pearl_auto32_merge.png
+```
+
+| input | command | output |
+| --- | --- | --- |
+| starry | `-palette auto:16` | [`starry_auto16.png`](docs/demo/outputs/starry_auto16.png) — 16 colors |
+| monet | `-palette auto:64` | [`monet_auto64.png`](docs/demo/outputs/monet_auto64.png) — 64 colors |
+| liberty | `-palette auto:256 -curve-init` | [`liberty_auto256.png`](docs/demo/outputs/liberty_auto256.png) — 256 colors |
+| pearl | `-palette auto:32 -merge 10` | [`pearl_auto32_merge.png`](docs/demo/outputs/pearl_auto32_merge.png) — 29 colors after merge |
+
+`-quantize auto|rgb|oklab` forces the space; `-merge DIST` also works on a loaded
+palette (e.g. `-palette lego -merge 25`). Quality vs pngquant/ImageMagick:
+`bench/compare-quant.sh`; full method + CIEDE2000 evidence in the
+[quantization research record](https://github.com/noelruault/research/tree/main/quantization).
+
 ## Feature checklist
 
 | Feature | Status in this demo |
 |---------|---------------------|
 | Single-image conversion + built-in palette | section 2 |
+| `-palette auto:N` derive + `-quantize` / `-curve-init` / `-merge` | section 14 |
 | `-palette PATH` (custom CSV) | sections 2, 4, 5, 6 |
 | `-size WxH` aspect-preserving (zero = auto) | every conversion |
 | `-mode nn / avg / catmullrom` | section 5 |

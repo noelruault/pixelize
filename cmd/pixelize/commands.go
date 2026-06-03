@@ -16,6 +16,7 @@ import (
 	"github.com/noelruault/pixelize"
 	"github.com/noelruault/pixelize/decode"
 	"github.com/noelruault/pixelize/palettes"
+	"github.com/noelruault/pixelize/quantize"
 	"github.com/noelruault/pixelize/preview"
 )
 
@@ -101,9 +102,27 @@ func pipeline(ctx context.Context, inPath string, pf *pipelineFlags) error {
 		return err
 	}
 
-	pal, paletteHint, err := loadPalette(pf.palette)
-	if err != nil {
-		return err
+	var pal pixelize.Palette[pixelize.EntryMeta]
+	var paletteHint string
+	var autoDist pixelize.DistanceFunc
+	if n, ok := parseAuto(pf.palette); ok {
+		// Derive a palette from the image (workflow B). Threading the matched
+		// assignment metric through the GIF paths is future work, so reject
+		// the combination for now rather than silently mis-assigning.
+		if pf.gifPath != "" {
+			return fmt.Errorf("-palette auto is not yet supported with -gif")
+		}
+		res, gerr := quantize.Generate(img, n, nil)
+		if gerr != nil {
+			return gerr
+		}
+		pal, paletteHint, autoDist = res.Palette, fmt.Sprintf("auto%d", n), res.Distance
+		slog.Info("derived palette", "colors", len(pal), "space", res.Space, "n", n)
+	} else {
+		pal, paletteHint, err = loadPalette(pf.palette)
+		if err != nil {
+			return err
+		}
 	}
 
 	if pf.gifPath != "" && len(sizeList) > 0 {
@@ -115,10 +134,11 @@ func pipeline(ctx context.Context, inPath string, pf *pipelineFlags) error {
 	}
 
 	opts := pixelize.ApplyOptions{
-		Width:  w,
-		Height: h,
-		Resize: mode,
-		Dither: pf.dither,
+		Width:    w,
+		Height:   h,
+		Resize:   mode,
+		Dither:   pf.dither,
+		Distance: autoDist, // matched assignment for an OKLab-derived palette; nil otherwise
 	}
 	switch {
 	case pf.fastLUT != nil:

@@ -18,6 +18,7 @@ Plenty of tools turn images into lego mosaics or retro-palette pixel art. Almost
 
 - Resize an image to exact pixel dimensions.
 - Reduce an image's colors to a built-in palette (NES, Game Boy, PICO-8, lego, and more) or your own CSV, HEX, GPL, or JSON file.
+- Or **derive a palette from the image itself** with `-palette auto:N` — turn any photo into clean N-color pixel art (beats ImageMagick's octree at every size and matches/edges pngquant; see the [`quantize`](quantize) package).
 - Build a map and a per-color piece count for a physical lego, perler, or cross-stitch mosaic.
 - Convert an animated GIF frame by frame, keeping its delays and loop count.
 - Render the result in your terminal (iTerm2, Kitty, or plain ANSI).
@@ -208,6 +209,7 @@ The single-image flags below also apply to `batch` and `watch`. Run `pixelize he
 | --- | --- |
 | `-size WxH` | Resize before quantizing. Omit to keep the original size. |
 | `-palette NAME` or `-palette PATH` | A palette by name (your directory, then embedded), or a palette file (`.csv`, `.hex`, `.gpl`, `.json`). |
+| `-palette auto:N` | Derive an N-color palette from the image (e.g. `auto:16`). Bare `auto` = 16. Picks the working color space by size automatically. Single-image only (not `-gif`). |
 | `-mode MODE` | Resize mode: `nn` (default), `avg`, `bilinear`, `catmullrom`. |
 | `-dither` | Floyd-Steinberg dithering. Off by default, which snaps each pixel to the nearest color. |
 | `-build-map PATH` | Write a per-pixel build map. |

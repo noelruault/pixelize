@@ -138,6 +138,21 @@ func parseSizeList(s string) ([]int, error) {
 	return out, nil
 }
 
+// parseAuto recognizes the pseudo-palette "auto" / "auto:N" passed to
+// -palette, which derives an N-color palette from the image instead of loading
+// one. Bare "auto" defaults to 16 colors. Returns (n, true) on a match.
+func parseAuto(arg string) (int, bool) {
+	if arg == "auto" {
+		return 16, true
+	}
+	if rest, ok := strings.CutPrefix(arg, "auto:"); ok {
+		if n, err := strconv.Atoi(rest); err == nil && n > 0 {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
 func parseMode(s string) (pixelize.ResizeMode, error) {
 	switch strings.ToLower(s) {
 	case "", "nn":

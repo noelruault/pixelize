@@ -52,9 +52,9 @@ Legend: ✅ done · 🟡 partial · ⬜ pending.
 | 3 — refinement accel | ⬜ | Plain Lloyd used; **weighted sort-means / Hamerly** not yet benchmarked (`07`). |
 | 4 — stack | 🟡 | Provisional stack chosen in `05` (default = PCA-divisive; quality = init+refine). **Left:** formal integration report `09`. |
 | 5 — promote to pixelize | ⬜ | No engine code yet; `quantize` pkg + CLI flags + golden/determinism tests pending. |
-| 6 — CQ100 shootout | ⬜ | The "beats competition" proof vs pngquant/IM/GIMP/Aseprite — not started (`10`). |
+| 6 — competition shootout | 🟡 | Harness built (`bench/compare-quant.sh` + emit/score); on the six paintings **ours/refine beats pngquant at N≤64 and ImageMagick at every N**, ours/pca beats IM at N≤64 (`10`). **Left:** CQ100/Kodak scale-up + GIMP; pngquant still wins N=256. |
 
-**Reports:** `01`, `04`, `05` ✅ · `02, 03, 06, 07, 09, 10` ⬜.
+**Reports:** `01`, `04`, `05`, `10` ✅ · `02, 03, 06, 07, 09` ⬜.
 **Cross-cutting finding (from `05`):** seeded k-means is non-deterministic because Go
 map order randomizes the histogram → **the engine must sort the histogram
 canonically** (carry into Phase 5 correctness).
@@ -118,7 +118,7 @@ the CLI:
 default); unit tests per algorithm. *Gate:* no regression to existing `Apply`
 paths. *Output:* shipped code + `pkg.go.dev` docs.
 
-### Phase 6 — Competition shootout — ⬜ PENDING
+### Phase 6 — Competition shootout — 🟡 PARTIAL
 Add `bench/compare-quant.sh` mirroring the existing `bench/compare.sh`. Run on
 **CQ100** (100 images + 8,400 precomputed reference quantizations) at N∈{4,16,64,256}
 vs pngquant/libimagequant, ImageMagick, GIMP, Aseprite CLI. Report mean & p95
@@ -133,7 +133,7 @@ Done when **all** of:
 1. ⬜ **Correctness.** Derived palette + exact nearest-color assignment (reuses the
    shipped kd-tree); the default algorithm is **deterministic** — a golden test in
    pixelize asserts byte-identical palette + output across runs and platforms.
-2. 🟡 **Quality, measured.** On CQ100 at N∈{4,16,64,256}: the default **beats median
+2. 🟡 **Quality, measured.** *(Met at N≤64 on six paintings: ours/refine < pngquant & ImageMagick; ours/pca < ImageMagick. N=256 pngquant leads by ~4%. CQ100 scale-up pending — report 10.)* On CQ100 at N∈{4,16,64,256}: the default **beats median
    cut and ImageMagick/Aseprite octree** on mean ΔE2000 at every N; the `kmeans`
    quality mode is **≤ libimagequant's mean ΔE2000** (or within a stated small
    margin) with a published per-image win-rate. Numbers and harness are committed

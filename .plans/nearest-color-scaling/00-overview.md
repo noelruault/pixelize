@@ -5,7 +5,7 @@ research reports (01 ImageMagick reverse-engineering, 02 algorithm/library surve
 03 measured experiments, 04 informed challenger, 05 cross-disciplinary transfer) in
 the nearest-color-scaling research record (now at
 `noelruault/research/nearest-color-scaling/`; they used to live in `.plans/research/`,
-see `.plans/research/MOVED.md`), grounded against the current pixelize source
+see `.plans/nearest-color-scaling/MOVED.md`), grounded against the current pixelize source
 (`palette.go`, `distance.go`). It is **planning only** — no pixelize source is
 changed. The companion `01-execution-plan.md` turns the verdicts here into a
 phased, hybrid-aware build plan.

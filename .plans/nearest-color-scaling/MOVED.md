@@ -27,8 +27,8 @@ application repo long-term, so it now lives in `noelruault/research`.
 The pixelize planning files that consume this research stay in `.plans/`, because
 they drive the build:
 
-- `../00-overview.md` — the judged synthesis / verdict-per-regime
-- `../01-execution-plan.md` — the phased implementation plan
+- `00-overview.md` — the judged synthesis / verdict-per-regime
+- `01-execution-plan.md` — the phased implementation plan
 - `../EVALUATION-RUBRIC.md`
 
 Only the raw research record moved.

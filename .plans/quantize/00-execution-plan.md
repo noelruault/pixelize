@@ -40,9 +40,28 @@ Baseline to beat (report 04, six paintings, exact assignment):
 | 16 | 4.857 | 11.197 | 98.62 |
 | 32 | 3.925 | 9.098 | 53.15 |
 
+## Status (updated 2026-06-03)
+
+Legend: ✅ done · 🟡 partial · ⬜ pending.
+
+| Phase | State | Evidence / what's left |
+|---|---|---|
+| 0 — baseline harness | 🟡 | Harness + metrics (CIEDE2000 self-tested vs Sharma) + median-cut/popularity floor done (`research/quantization/04`). **Left:** add **Wu** + **octree** as named baselines. |
+| 1 — lead pieces | 🟡 | Maximin-seeded k-means **and** PCA-divisive implemented + measured (`05`); gate met — PCA-divisive beats median cut, maximin ruled out. **Left:** the `Ckmeans.1d.dp` optimal-1D split variant. |
+| 2 — color space | 🟡 | OKLab implemented + measured; ruled out under RGB assignment (`05` D3). **Left:** **HyAB**, and the matched-assignment OKLab rematch (`02`). |
+| 3 — refinement accel | ⬜ | Plain Lloyd used; **weighted sort-means / Hamerly** not yet benchmarked (`07`). |
+| 4 — stack | 🟡 | Provisional stack chosen in `05` (default = PCA-divisive; quality = init+refine). **Left:** formal integration report `09`. |
+| 5 — promote to pixelize | ⬜ | No engine code yet; `quantize` pkg + CLI flags + golden/determinism tests pending. |
+| 6 — CQ100 shootout | ⬜ | The "beats competition" proof vs pngquant/IM/GIMP/Aseprite — not started (`10`). |
+
+**Reports:** `01`, `04`, `05` ✅ · `02, 03, 06, 07, 09, 10` ⬜.
+**Cross-cutting finding (from `05`):** seeded k-means is non-deterministic because Go
+map order randomizes the histogram → **the engine must sort the histogram
+canonically** (carry into Phase 5 correctness).
+
 ## Phases
 
-### Phase 0 — Close the baseline (harness)
+### Phase 0 — Close the baseline (harness) — 🟡 PARTIAL
 Add **Wu** (variance-min cut with cumulative moments) and **octree** as `Quantizer`s
 in `bench/`. These are the honest "classic best non-iterative" and "what
 ImageMagick/Aseprite actually do" baselines. *Measure:* ΔE2000/MSE/time vs median
@@ -50,7 +69,7 @@ cut at N∈{4,8,16,32,64,256}. *Gate:* Wu should beat median cut at ~equal cost
 (expected from the literature); if it doesn't, the harness has a bug — fix before
 proceeding. *Output:* report `04` updated, `02-pieces-color-space.md` stub.
 
-### Phase 1 — The two lead cross-disciplinary pieces (P3)
+### Phase 1 — The two lead cross-disciplinary pieces (P3) — 🟡 PARTIAL
 Implement, each as a `Quantizer`, measured as a delta vs Wu:
 1. **Maximin-seeded k-means** — deterministic Gonzalez farthest-point seeding (seed
    1 = most-frequent color) on a frequency-weighted histogram, then a few Lloyd
@@ -62,7 +81,7 @@ Implement, each as a `Quantizer`, measured as a delta vs Wu:
 *Gate:* at least one must beat Wu on mean ΔE2000 at N=16 and N=64 without losing
 determinism. *Output:* `05-pieces-selection-exotic.md` (+data).
 
-### Phase 2 — Color space as a variable (P1)
+### Phase 2 — Color space as a variable (P1) — 🟡 PARTIAL
 Add an **OKLab** selection mode (cluster/seed in OKLab; evaluation stays CIEDE2000)
 and **A/B HyAB** as the centroid metric. Re-run Phase-0/1 pieces in each space.
 *Watch:* the documented trap — CIELAB does **not** automatically beat RGB for
@@ -72,14 +91,14 @@ non-Euclidean so it may not reuse a plain Euclidean kd-tree for *exact* assignme
 *Gate:* keep a space only if it lowers mean ΔE2000 at equal determinism, net of the
 assignment caveat. *Output:* `02-pieces-color-space.md` (+data), `06-seeding.md`.
 
-### Phase 3 — Refinement accelerators (P5)
+### Phase 3 — Refinement accelerators (P5) — ⬜ PENDING
 Benchmark **weighted sort-means / Hamerly bounds** for the Lloyd passes against
 repeated kd-tree queries. Exact, deterministic, zero quality change — pure speed.
 *Gate:* the standing pixelize [efficiency rubric](../EVALUATION-RUBRIC.md) (faster
 and not heavier → take it; equal time → leaner). *Output:* `07-refinement.md`
 (+data).
 
-### Phase 4 — Stack the winners (integration)
+### Phase 4 — Stack the winners (integration) — 🟡 PARTIAL
 Assemble the best `(P1 space × P3 selection/seed × P5 refine)` into one pipeline and
 benchmark the **integration**, not just the pieces, to catch interactions (e.g. a
 histogram precision fine alone that costs ΔE after refinement). Decide the two
@@ -88,7 +107,7 @@ shipped configs:
 - a **`-quantize kmeans` quality mode** (maximin-seeded + refined).
 *Output:* `09-integration.md` (+data) — the chosen stack with its number.
 
-### Phase 5 — Promote into pixelize
+### Phase 5 — Promote into pixelize — ⬜ PENDING
 Create the `quantize` package (not the harness): `Quantizer` interface, `Generate()
 → Palette[struct{}]`, and `draw.Quantizer` impl so it drops into `image/gif`. Wire
 the CLI:
@@ -99,7 +118,7 @@ the CLI:
 default); unit tests per algorithm. *Gate:* no regression to existing `Apply`
 paths. *Output:* shipped code + `pkg.go.dev` docs.
 
-### Phase 6 — Competition shootout
+### Phase 6 — Competition shootout — ⬜ PENDING
 Add `bench/compare-quant.sh` mirroring the existing `bench/compare.sh`. Run on
 **CQ100** (100 images + 8,400 precomputed reference quantizations) at N∈{4,16,64,256}
 vs pngquant/libimagequant, ImageMagick, GIMP, Aseprite CLI. Report mean & p95
@@ -111,24 +130,24 @@ in the same evidence style as the ImageMagick comparison.
 
 Done when **all** of:
 
-1. **Correctness.** Derived palette + exact nearest-color assignment (reuses the
+1. ⬜ **Correctness.** Derived palette + exact nearest-color assignment (reuses the
    shipped kd-tree); the default algorithm is **deterministic** — a golden test in
    pixelize asserts byte-identical palette + output across runs and platforms.
-2. **Quality, measured.** On CQ100 at N∈{4,16,64,256}: the default **beats median
+2. 🟡 **Quality, measured.** On CQ100 at N∈{4,16,64,256}: the default **beats median
    cut and ImageMagick/Aseprite octree** on mean ΔE2000 at every N; the `kmeans`
    quality mode is **≤ libimagequant's mean ΔE2000** (or within a stated small
    margin) with a published per-image win-rate. Numbers and harness are committed
    and reproducible.
-3. **Speed.** Single-image derive at 512² is within a stated budget (target:
+3. ⬜ **Speed.** Single-image derive at 512² is within a stated budget (target:
    default ≤ ~2× median-cut time; `kmeans` mode bounded by iteration count), and
    passes the [efficiency rubric](../EVALUATION-RUBRIC.md) on any
    speed/resource trade.
-4. **Integration.** `-palette auto:N`, `-quantize`, `-merge DIST` all work and feed
+4. ⬜ **Integration.** `-palette auto:N`, `-quantize`, `-merge DIST` all work and feed
    dither / build-map / pieces / GIF / batch / watch unchanged; the Aseprite plugin's
    "Auto (N colors)" path works through the binary with no plugin-side algorithm.
-5. **Determinism & alpha decided.** Seeding strategy pinned; transparency either
+5. 🟡 **Determinism & alpha decided.** Seeding strategy pinned; transparency either
    handled or explicitly documented as straight-alpha-only for v1.
-6. **Documentation.** Research reports `02,03,05,06,07,09,10` filled with data
+6. 🟡 **Documentation.** Research reports `02,03,05,06,07,09,10` filled with data
    companions; pixelize README has the quantization benchmark; package has GoDoc and
    examples.
 

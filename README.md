@@ -18,6 +18,7 @@ Plenty of tools turn images into lego mosaics or retro-palette pixel art. Almost
 
 - Resize an image to exact pixel dimensions.
 - Reduce an image's colors to a built-in palette (NES, Game Boy, PICO-8, lego, and more) or your own CSV, HEX, GPL, or JSON file.
+- Or **derive a palette from the image itself** with `-palette auto:N` — turn any photo into clean N-color pixel art (beats ImageMagick's octree at every size and matches/edges pngquant; see the [`quantize`](quantize) package).
 - Build a map and a per-color piece count for a physical lego, perler, or cross-stitch mosaic.
 - Convert an animated GIF frame by frame, keeping its delays and loop count.
 - Render the result in your terminal (iTerm2, Kitty, or plain ANSI).
@@ -83,6 +84,83 @@ id,name,hex,count
 ```
 
 The built-in `lego` palette carries real rebrickable brick IDs, so that `id` column maps straight to what you order.
+
+## Turn any image into N colors
+
+When you don't want to snap to a *fixed* palette but to derive a good one *from the
+image*, use `-palette auto:N`. It clusters the image's colors into N representatives
+and reduces to them — the "any photo into clean pixel art" path.
+
+```sh
+pixelize photo.jpg -size 96x96 -palette auto:16 -o art.png   # 16-color pixel art
+pixelize photo.jpg -palette auto:64 -o art.png               # bare `auto` = 16
+```
+
+One pipeline does it — a PCA-divisive initializer followed by a weighted k-means
+refine — and it runs in the color space that's best for the palette size, chosen
+automatically:
+
+- **small palettes (N ≤ 48) → RGB.** Entries are far apart (large color differences),
+  where plain RGB does best — the pixel-art regime (Game Boy, PICO-8, NES).
+- **large palettes (N > 48) → OKLab.** Entries are close (small differences), OKLab's
+  perceptually-uniform regime. The result is matched: pixels are *assigned* in the
+  same space the palette was built in.
+
+Controls (all only apply with `-palette auto`):
+
+```sh
+pixelize photo.jpg -palette auto:64 -quantize rgb      # force the color space (auto|rgb|oklab)
+pixelize photo.jpg -palette auto:256 -curve-init       # space-filling-curve init; helps at N>=256
+```
+
+And a palette-agnostic post-pass, **merge similar colors**, which works on a derived
+*or* a loaded palette (e.g. trimming near-duplicate bricks so a parts list is
+buildable):
+
+```sh
+pixelize photo.jpg -palette auto:64 -merge 12          # derive 64, then merge colors within 12 (8-bit RGB)
+pixelize photo.jpg -palette lego -merge 25             # collapse near-duplicate lego bricks
+```
+
+Output is **deterministic** (same image, same palette, every run). The engine lives
+in the [`quantize`](quantize) package and feeds the rest of the pipeline (dither,
+build map, pieces, GIF) unchanged.
+
+### Benchmark vs pngquant and ImageMagick
+
+Same task, scored identically: derive an N-color palette, reduce the image, measure
+the result's perceptual error (mean **CIEDE2000**, lower is better) against the
+original — no dithering, so only palette quality is compared. Run on the 18-image
+**Kodak** suite. pixelize is `-palette auto:N`; pngquant is `--nofs`; ImageMagick is
+`-colors N -dither None`.
+
+| N | ImageMagick (octree) | pngquant (libimagequant) | **pixelize auto** |
+| --- | --- | --- | --- |
+| 4 | 8.89 | 8.40 | **8.09** |
+| 16 | 4.98 | 4.27 | **4.21** |
+| 64 | 2.91 | 2.51 | **2.48** |
+| 256 | 1.81 | 1.59 | **1.56** |
+
+pixelize beats ImageMagick's octree at **every** size (decisively — it wins 18/18
+images at N≥16) and **matches-or-edges libimagequant** at every size (it wins the
+mean everywhere and 10–14 of 18 images; at N=16 it is roughly a tie). pngquant is a
+strong, well-tuned bar — this is a genuine edge, not a rout, and we say so. (pngquant
+also caps at 256 colors; pixelize scales past it.)
+
+The full method — the pipeline decomposed into pieces, every piece (and many
+cross-disciplinary ideas: vector quantization, space-filling curves, deterministic
+annealing, …) benchmarked and **kept or discarded with a number** — and the measured
+evidence behind the table live in the
+[quantization research record](https://github.com/noelruault/research/tree/89ce229f966ae63af5ec68185d55cd2a499ed117/quantization)
+in `noelruault/research` (pinned), which also reports the authoritative CIEDE2000
+numbers above. The validation used Kodak + the demo paintings; the 100-image CQ100
+set was unreachable in the build environment.
+
+To reproduce locally against the shipped binary, `bench/compare-quant.sh` runs the
+three tools and reports **RGB RMSE** — a dependency-free proxy (needs only pixelize,
+pngquant, ImageMagick). Note RMSE and CIEDE2000 diverge: at N>48 pixelize optimizes
+*perceptual* error in OKLab, so it can trail on RGB-RMSE at large palettes while
+winning on CIEDE2000 — the metric that tracks what the eye sees.
 
 ## Palettes
 
@@ -198,7 +276,25 @@ func main() {
 }
 ```
 
-The full reference is at [pkg.go.dev/github.com/noelruault/pixelize](https://pkg.go.dev/github.com/noelruault/pixelize).
+To **derive** a palette instead of loading one, use the `quantize` package. It
+returns the palette paired with the matched assignment metric, so the perceptual
+result holds through `Apply`:
+
+```go
+res, err := quantize.Generate(img, 16, nil) // nil = defaults (space auto-picked by N)
+if err != nil {
+	panic(err)
+}
+pat, err := res.Palette.Apply(ctx, img, pixelize.ApplyOptions{
+	Width: 64, Height: 64,
+	Distance: res.Distance, // matched assignment (OKLab when the OKLab regime was chosen)
+})
+```
+
+`quantize.Merge(palette, dist)` collapses near-duplicate colors in any palette.
+
+The full reference is at [pkg.go.dev/github.com/noelruault/pixelize](https://pkg.go.dev/github.com/noelruault/pixelize)
+(and [.../quantize](https://pkg.go.dev/github.com/noelruault/pixelize/quantize)).
 
 ## Configuration
 
@@ -208,6 +304,10 @@ The single-image flags below also apply to `batch` and `watch`. Run `pixelize he
 | --- | --- |
 | `-size WxH` | Resize before quantizing. Omit to keep the original size. |
 | `-palette NAME` or `-palette PATH` | A palette by name (your directory, then embedded), or a palette file (`.csv`, `.hex`, `.gpl`, `.json`). |
+| `-palette auto:N` | Derive an N-color palette from the image (e.g. `auto:16`). Bare `auto` = 16. Picks the working color space by size automatically. |
+| `-quantize SPACE` | With `-palette auto`: force the color space — `auto` (default), `rgb`, `oklab`. |
+| `-curve-init` | With `-palette auto`: space-filling-curve initializer (helps at N≥256). |
+| `-merge DIST` | Merge palette colors closer than DIST (8-bit RGB). Works on derived or loaded palettes. `0` = off. |
 | `-mode MODE` | Resize mode: `nn` (default), `avg`, `bilinear`, `catmullrom`. |
 | `-dither` | Floyd-Steinberg dithering. Off by default, which snaps each pixel to the nearest color. |
 | `-build-map PATH` | Write a per-pixel build map. |
@@ -223,7 +323,7 @@ Two settings live outside the flags:
 
 ## Architecture
 
-pixelize is one Go module. The command lives in `cmd/pixelize`. The image work lives in the root `pixelize` package and three sub-packages:
+pixelize is one Go module. The command lives in `cmd/pixelize`. The image work lives in the root `pixelize` package and its sub-packages:
 
 ```
 pixelize/
@@ -232,6 +332,7 @@ pixelize/
   decode/         image decoding and extra input formats
   preview/        terminal rendering backends (iTerm2, Kitty, ANSI)
   palettes/       embedded example palettes and name resolution
+  quantize/       derive a palette from an image (-palette auto:N) + merge
 ```
 
 Color matching goes through a `DistanceFunc`. The default is the standard library's unweighted Euclidean metric. Pass a `Distance` in `ApplyOptions` to override it, for example with a perceptual metric such as CIEDE2000.

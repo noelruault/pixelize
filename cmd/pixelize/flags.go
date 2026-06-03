@@ -31,6 +31,11 @@ type pipelineFlags struct {
 	verbose  int
 	lut      bool
 
+	// Palette-derivation flags (used with -palette auto:N).
+	quantize  string  // color space: auto | rgb | oklab
+	curveInit bool    // space-filling-curve init (helps at N>=256)
+	merge     float64 // merge palette colors closer than this (8-bit RGB); 0=off
+
 	// fastLUT, when set, is a prebuilt Fast-mode table reused across calls
 	// (batch/watch build it once for the whole run). Not a flag.
 	fastLUT *pixelize.FastLUT
@@ -51,6 +56,9 @@ func registerPipeline(fs *flag.FlagSet) *pipelineFlags {
 	fs.StringVar(&pf.buildMap, "build-map", "", "write per-pixel build map to PATH")
 	fs.StringVar(&pf.pieces, "pieces", "", "write piece-count CSV to PATH")
 	fs.StringVar(&pf.output, "o", "", "output PNG path")
+	fs.StringVar(&pf.quantize, "quantize", "auto", "with -palette auto: color space auto|rgb|oklab")
+	fs.BoolVar(&pf.curveInit, "curve-init", false, "with -palette auto: space-filling-curve init (helps at N>=256)")
+	fs.Float64Var(&pf.merge, "merge", 0, "merge palette colors closer than DIST (8-bit RGB); 0=off")
 	fs.BoolFunc("v", "verbose (info)", func(string) error { pf.verbose = 1; return nil })
 	fs.BoolFunc("vv", "very verbose (debug)", func(string) error { pf.verbose = 2; return nil })
 	return pf
@@ -136,6 +144,21 @@ func parseSizeList(s string) ([]int, error) {
 		out = append(out, v)
 	}
 	return out, nil
+}
+
+// parseAuto recognizes the pseudo-palette "auto" / "auto:N" passed to
+// -palette, which derives an N-color palette from the image instead of loading
+// one. Bare "auto" defaults to 16 colors. Returns (n, true) on a match.
+func parseAuto(arg string) (int, bool) {
+	if arg == "auto" {
+		return 16, true
+	}
+	if rest, ok := strings.CutPrefix(arg, "auto:"); ok {
+		if n, err := strconv.Atoi(rest); err == nil && n > 0 {
+			return n, true
+		}
+	}
+	return 0, false
 }
 
 func parseMode(s string) (pixelize.ResizeMode, error) {

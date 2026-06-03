@@ -16,6 +16,7 @@ import (
 	"github.com/noelruault/pixelize"
 	"github.com/noelruault/pixelize/decode"
 	"github.com/noelruault/pixelize/palettes"
+	"github.com/noelruault/pixelize/quantize"
 	"github.com/noelruault/pixelize/preview"
 )
 
@@ -101,24 +102,56 @@ func pipeline(ctx context.Context, inPath string, pf *pipelineFlags) error {
 		return err
 	}
 
-	pal, paletteHint, err := loadPalette(pf.palette)
-	if err != nil {
-		return err
+	var pal pixelize.Palette[pixelize.EntryMeta]
+	var paletteHint string
+	var autoDist pixelize.DistanceFunc
+	if n, ok := parseAuto(pf.palette); ok {
+		// Derive a palette from the image (workflow B).
+		o := &quantize.Options{CurveInit: pf.curveInit}
+		switch strings.ToLower(pf.quantize) {
+		case "rgb":
+			o.Space = quantize.SpaceRGB
+		case "oklab":
+			o.Space = quantize.SpaceOKLab
+		case "", "auto":
+			o.Space = quantize.SpaceAuto
+		default:
+			return fmt.Errorf("unknown -quantize %q (want auto | rgb | oklab)", pf.quantize)
+		}
+		res, gerr := quantize.Generate(img, n, o)
+		if gerr != nil {
+			return gerr
+		}
+		pal, paletteHint, autoDist = res.Palette, fmt.Sprintf("auto%d", n), res.Distance
+		slog.Info("derived palette", "colors", len(pal), "space", res.Space, "n", n)
+	} else {
+		pal, paletteHint, err = loadPalette(pf.palette)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Optional "merge similar colors" post-pass — works on any palette.
+	if pf.merge > 0 {
+		before := len(pal)
+		pal = quantize.Merge(pal, pf.merge)
+		slog.Info("merged palette", "from", before, "to", len(pal), "dist", pf.merge)
 	}
 
 	if pf.gifPath != "" && len(sizeList) > 0 {
-		return runGIFSizeList(ctx, img, pal, sizeList, mode, pf.dither, loopMode, pf.gifPath)
+		return runGIFSizeList(ctx, img, pal, autoDist, sizeList, mode, pf.dither, loopMode, pf.gifPath)
 	}
 
 	if pf.gifPath != "" && strings.EqualFold(filepath.Ext(inPath), ".gif") {
-		return runAnimatedGIF(ctx, inPath, pal, w, h, mode, pf.dither, pf.gifPath)
+		return runAnimatedGIF(ctx, inPath, pal, autoDist, w, h, mode, pf.dither, pf.gifPath)
 	}
 
 	opts := pixelize.ApplyOptions{
-		Width:  w,
-		Height: h,
-		Resize: mode,
-		Dither: pf.dither,
+		Width:    w,
+		Height:   h,
+		Resize:   mode,
+		Dither:   pf.dither,
+		Distance: autoDist, // matched assignment for an OKLab-derived palette; nil otherwise
 	}
 	switch {
 	case pf.fastLUT != nil:
@@ -202,6 +235,7 @@ func runGIFSizeList(
 	ctx context.Context,
 	img image.Image,
 	pal pixelize.Palette[pixelize.EntryMeta],
+	dist pixelize.DistanceFunc,
 	sizes []int,
 	mode pixelize.ResizeMode,
 	dither bool,
@@ -217,7 +251,7 @@ func runGIFSizeList(
 	}
 	for _, s := range sizes {
 		pat, err := pal.Apply(ctx, img, pixelize.ApplyOptions{
-			Width: s, Height: s, Resize: mode, Dither: dither,
+			Width: s, Height: s, Resize: mode, Dither: dither, Distance: dist,
 		})
 		if err != nil {
 			return err
@@ -248,6 +282,7 @@ func runAnimatedGIF(
 	ctx context.Context,
 	inPath string,
 	pal pixelize.Palette[pixelize.EntryMeta],
+	dist pixelize.DistanceFunc,
 	w, h int,
 	mode pixelize.ResizeMode,
 	dither bool,
@@ -264,7 +299,7 @@ func runAnimatedGIF(
 	out := make([]*image.RGBA, len(anim.Frames))
 	for i, frame := range anim.Frames {
 		pat, err := pal.Apply(ctx, frame, pixelize.ApplyOptions{
-			Width: w, Height: h, Resize: mode, Dither: dither,
+			Width: w, Height: h, Resize: mode, Dither: dither, Distance: dist,
 		})
 		if err != nil {
 			return fmt.Errorf("frame %d: %w", i, err)

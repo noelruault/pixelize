@@ -50,11 +50,11 @@ Legend: ✅ done · 🟡 partial · ⬜ pending.
 | 1 — lead pieces | 🟡 | Maximin-seeded k-means **and** PCA-divisive implemented + measured (`05`); gate met — PCA-divisive beats median cut, maximin ruled out. **Left:** the `Ckmeans.1d.dp` optimal-1D split variant. |
 | 2 — color space | ✅ | **Matched-assignment rematch won (`02`): OKLab cluster+assign beats pngquant at every N.** D3 was an assignment mismatch, now fixed. **Left (optional):** HyAB centroid metric. |
 | 3 — refinement accel | ⬜ | Plain Lloyd used; **weighted sort-means / Hamerly** not yet benchmarked (`07`). |
-| 4 — stack | 🟡 | Provisional stack chosen in `05` (default = PCA-divisive; quality = init+refine). **Left:** formal integration report `09`. |
+| 4 — stack | 🟡 | Champion = OKLab-matched PCA-divisive-init + Lloyd refine; **confirmed best** — the interdisciplinary shortlist (PNN, multi-restart, error-weight, HyAB) was measured and all discarded (`08`). **Left:** formal integration report `09`. |
 | 5 — promote to pixelize | ⬜ | No engine code yet; `quantize` pkg + CLI flags + golden/determinism tests pending. |
 | 6 — competition shootout | 🟡 | Harness built; on six paintings **ours/refine-oklab beats pngquant at EVERY N** (incl. N=256, 6/6) and ImageMagick everywhere (`10`,`02`). **Left:** CQ100/Kodak scale-up + GIMP. |
 
-**Reports:** `01`, `02`, `04`, `05`, `06`, `07`, `10` ✅ · `03, 09` ⬜.
+**Reports:** `01`, `02`, `04`, `05`, `06`, `07`, `08`, `10` ✅ · `03, 09` ⬜.
 **Cross-cutting finding (from `05`):** seeded k-means is non-deterministic because Go
 map order randomizes the histogram → **the engine must sort the histogram
 canonically** (carry into Phase 5 correctness).

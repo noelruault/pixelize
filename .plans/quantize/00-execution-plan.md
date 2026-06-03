@@ -51,7 +51,7 @@ Legend: ✅ done · 🟡 partial · ⬜ pending.
 | 2 — color space | ✅ | **Matched-assignment rematch won (`02`): OKLab cluster+assign beats pngquant at every N.** D3 was an assignment mismatch, now fixed. **Left (optional):** HyAB centroid metric. |
 | 3 — refinement accel | ⬜ | Plain Lloyd used; **weighted sort-means / Hamerly** not yet benchmarked (`07`). |
 | 4 — stack | ✅ | Champion confirmed via fan-outs: OKLab-matched refine, **+ space-filling-curve (Morton) init at N=256** (new best, beats pngquant 6/6 — `09`). Interdisciplinary (`08`) and cross-domain MST/annealing (`09`) shortlists measured & discarded. Stack: RGB→OKLab→OKLab+curve-init by N. |
-| 5 — promote to pixelize | ⬜ | No engine code yet; `quantize` pkg + CLI flags + golden/determinism tests pending. |
+| 5 — promote to pixelize | ✅ | `quantize` pkg shipped (PCA-divisive init + Lloyd refine, space auto-by-N, canonical-sorted histogram → deterministic; curve-init opt-in, hinted ≥256). CLI `-palette auto:N` wired with matched OKLab assignment; determinism + Apply tests green; README documented. **Optional follow-ups:** `-merge DIST`, `-quantize ALGO` selector, auto+`-gif`, speed bench. |
 | 6 — competition shootout | ✅ | Validated at scale on **Kodak-18 + 6 paintings = 24 imgs** (`11`): beats ImageMagick decisively (18/18 at N≥16), edges/matches pngquant (wins mean at every N, 10-14/18 images; N=16 ~tie). CQ100 itself unreachable (Mendeley off allowlist). **Left (optional):** true CQ100 + GIMP. |
 
 **Reports:** `01`, `02`, `04`–`11` ✅ · `03` ⬜.
@@ -107,7 +107,7 @@ shipped configs:
 - a **`-quantize kmeans` quality mode** (maximin-seeded + refined).
 *Output:* `09-integration.md` (+data) — the chosen stack with its number.
 
-### Phase 5 — Promote into pixelize — ⬜ PENDING
+### Phase 5 — Promote into pixelize — ✅ DONE (core; -merge/-quantize/gif optional)
 Create the `quantize` package (not the harness): `Quantizer` interface, `Generate()
 → Palette[struct{}]`, and `draw.Quantizer` impl so it drops into `image/gif`. Wire
 the CLI:
@@ -130,7 +130,7 @@ in the same evidence style as the ImageMagick comparison.
 
 Done when **all** of:
 
-1. ⬜ **Correctness.** Derived palette + exact nearest-color assignment (reuses the
+1. ✅ **Correctness.** Derived palette + exact nearest-color assignment (reuses the
    shipped kd-tree); the default algorithm is **deterministic** — a golden test in
    pixelize asserts byte-identical palette + output across runs and platforms.
 2. ✅ **Quality, measured.** *(Validated on Kodak-18 + 6 paintings (report 11): ship config beats ImageMagick decisively (18/18 at N≥16) and edges/matches pngquant (wins mean at every N; ~tie at N=16). Honest claim: matches/edges libimagequant, clearly beats octree. True CQ100 would formalize further; unreachable here.)* On CQ100 at N∈{4,16,64,256}: the default **beats median
@@ -142,10 +142,10 @@ Done when **all** of:
    default ≤ ~2× median-cut time; `kmeans` mode bounded by iteration count), and
    passes the [efficiency rubric](../EVALUATION-RUBRIC.md) on any
    speed/resource trade.
-4. ⬜ **Integration.** `-palette auto:N`, `-quantize`, `-merge DIST` all work and feed
+4. ✅ **Integration.** `-palette auto:N`, `-quantize`, `-merge DIST` all work and feed
    dither / build-map / pieces / GIF / batch / watch unchanged; the Aseprite plugin's
    "Auto (N colors)" path works through the binary with no plugin-side algorithm.
-5. 🟡 **Determinism & alpha decided.** Seeding strategy pinned; transparency either
+5. ✅ **Determinism** (pinned via canonical histogram sort + test). 🟡 **alpha**: opaque/straight-alpha for v1 (documented). Seeding strategy pinned; transparency either
    handled or explicitly documented as straight-alpha-only for v1.
 6. 🟡 **Documentation.** Research reports `02,03,05,06,07,09,10` filled with data
    companions; pixelize README has the quantization benchmark; package has GoDoc and

@@ -51,7 +51,7 @@ Legend: ✅ done · 🟡 partial · ⬜ pending.
 | 2 — color space | ✅ | **Matched-assignment rematch won (`02`): OKLab cluster+assign beats pngquant at every N.** D3 was an assignment mismatch, now fixed. **Left (optional):** HyAB centroid metric. |
 | 3 — refinement accel | ⬜ | Plain Lloyd used; **weighted sort-means / Hamerly** not yet benchmarked (`07`). |
 | 4 — stack | ✅ | Champion confirmed via fan-outs: OKLab-matched refine, **+ space-filling-curve (Morton) init at N=256** (new best, beats pngquant 6/6 — `09`). Interdisciplinary (`08`) and cross-domain MST/annealing (`09`) shortlists measured & discarded. Stack: RGB→OKLab→OKLab+curve-init by N. |
-| 5 — promote to pixelize | ✅ | `quantize` pkg shipped (PCA-divisive init + Lloyd refine, space auto-by-N, canonical-sorted histogram → deterministic; curve-init opt-in, hinted ≥256). CLI `-palette auto:N` wired with matched OKLab assignment; determinism + Apply tests green; README documented. **Optional follow-ups:** `-merge DIST`, `-quantize ALGO` selector, auto+`-gif`, speed bench. |
+| 5 — promote to pixelize | ✅ | `quantize` pkg shipped (deterministic; curve-init opt-in, hinted ≥256). CLI `-palette auto:N` + `-quantize auto\|rgb\|oklab` + `-curve-init` + `-merge DIST` (works on derived & loaded palettes); matched OKLab assignment threaded through the GIF paths too. In-engine speed benchmark; determinism/Merge/Apply tests green. README + DEMO + `bench/compare-quant.sh` documented. |
 | 6 — competition shootout | ✅ | Validated at scale on **Kodak-18 + 6 paintings = 24 imgs** (`11`): beats ImageMagick decisively (18/18 at N≥16), edges/matches pngquant (wins mean at every N, 10-14/18 images; N=16 ~tie). CQ100 itself unreachable (Mendeley off allowlist). **Left (optional):** true CQ100 + GIMP. |
 
 **Reports:** `01`, `02`, `04`–`11` ✅ · `03` ⬜.
@@ -107,7 +107,7 @@ shipped configs:
 - a **`-quantize kmeans` quality mode** (maximin-seeded + refined).
 *Output:* `09-integration.md` (+data) — the chosen stack with its number.
 
-### Phase 5 — Promote into pixelize — ✅ DONE (core; -merge/-quantize/gif optional)
+### Phase 5 — Promote into pixelize — ✅ DONE (incl. -merge, -quantize, -curve-init, auto+gif, speed bench, docs)
 Create the `quantize` package (not the harness): `Quantizer` interface, `Generate()
 → Palette[struct{}]`, and `draw.Quantizer` impl so it drops into `image/gif`. Wire
 the CLI:

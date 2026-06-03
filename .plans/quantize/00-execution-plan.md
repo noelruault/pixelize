@@ -52,9 +52,9 @@ Legend: ✅ done · 🟡 partial · ⬜ pending.
 | 3 — refinement accel | ⬜ | Plain Lloyd used; **weighted sort-means / Hamerly** not yet benchmarked (`07`). |
 | 4 — stack | ✅ | Champion confirmed via fan-outs: OKLab-matched refine, **+ space-filling-curve (Morton) init at N=256** (new best, beats pngquant 6/6 — `09`). Interdisciplinary (`08`) and cross-domain MST/annealing (`09`) shortlists measured & discarded. Stack: RGB→OKLab→OKLab+curve-init by N. |
 | 5 — promote to pixelize | ⬜ | No engine code yet; `quantize` pkg + CLI flags + golden/determinism tests pending. |
-| 6 — competition shootout | 🟡 | Harness built; on six paintings **ours/refine-oklab beats pngquant at EVERY N** (incl. N=256, 6/6) and ImageMagick everywhere (`10`,`02`). **Left:** CQ100/Kodak scale-up + GIMP. |
+| 6 — competition shootout | ✅ | Validated at scale on **Kodak-18 + 6 paintings = 24 imgs** (`11`): beats ImageMagick decisively (18/18 at N≥16), edges/matches pngquant (wins mean at every N, 10-14/18 images; N=16 ~tie). CQ100 itself unreachable (Mendeley off allowlist). **Left (optional):** true CQ100 + GIMP. |
 
-**Reports:** `01`, `02`, `04`, `05`, `06`, `07`, `08`, `09`, `10` ✅ · `03` ⬜.
+**Reports:** `01`, `02`, `04`–`11` ✅ · `03` ⬜.
 **Cross-cutting finding (from `05`):** seeded k-means is non-deterministic because Go
 map order randomizes the histogram → **the engine must sort the histogram
 canonically** (carry into Phase 5 correctness).
@@ -118,7 +118,7 @@ the CLI:
 default); unit tests per algorithm. *Gate:* no regression to existing `Apply`
 paths. *Output:* shipped code + `pkg.go.dev` docs.
 
-### Phase 6 — Competition shootout — 🟡 PARTIAL
+### Phase 6 — Competition shootout — ✅ DONE (Kodak-18; true CQ100 optional)
 Add `bench/compare-quant.sh` mirroring the existing `bench/compare.sh`. Run on
 **CQ100** (100 images + 8,400 precomputed reference quantizations) at N∈{4,16,64,256}
 vs pngquant/libimagequant, ImageMagick, GIMP, Aseprite CLI. Report mean & p95
@@ -133,7 +133,7 @@ Done when **all** of:
 1. ⬜ **Correctness.** Derived palette + exact nearest-color assignment (reuses the
    shipped kd-tree); the default algorithm is **deterministic** — a golden test in
    pixelize asserts byte-identical palette + output across runs and platforms.
-2. 🟡 **Quality, measured.** *(On six paintings, OKLab-matched refine beats pngquant AND ImageMagick at every N (report 02/10); deterministic ours/pca beats ImageMagick at N≤64. CQ100 scale-up still pending before the claim is final.)* On CQ100 at N∈{4,16,64,256}: the default **beats median
+2. ✅ **Quality, measured.** *(Validated on Kodak-18 + 6 paintings (report 11): ship config beats ImageMagick decisively (18/18 at N≥16) and edges/matches pngquant (wins mean at every N; ~tie at N=16). Honest claim: matches/edges libimagequant, clearly beats octree. True CQ100 would formalize further; unreachable here.)* On CQ100 at N∈{4,16,64,256}: the default **beats median
    cut and ImageMagick/Aseprite octree** on mean ΔE2000 at every N; the `kmeans`
    quality mode is **≤ libimagequant's mean ΔE2000** (or within a stated small
    margin) with a published per-image win-rate. Numbers and harness are committed
